@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { initMockData, getGradeColor, getStatusColor } from '../mockData';
 import { PGCLogo, Toast } from './homepage';
 
