@@ -20,6 +20,8 @@ app.use('/api/teachers', require('./routes/teacherRoutes'));
 app.use('/api/attendance', require('./routes/attendanceRoutes'));
 app.use('/api/assignments', require('./routes/assignmentRoutes'));
 app.use('/api/results', require('./routes/resultRoutes'));
+app.use('/api/timetable', require('./routes/timetableRoutes'));
+app.use('/api/announcements', require('./routes/announcementRoutes'));
 
 // Test Route
 app.get('/', (req, res) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { initMockData, getGradeColor, getStatusColor } from '../mockData';
 import { PGCLogo, Toast } from './homepage';
+import { getStudents, addStudent, getTeachers, addTeacher } from '../api';
 
 const API = 'http://localhost:5000/api';
 
@@ -66,6 +67,26 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   const [ttRoom,setTtRoom]=useState('');
   const [ttViewRole,setTtViewRole]=useState('student');
   const [ttViewName,setTtViewName]=useState('');
+  useEffect(()=>{
+  apiCall('/timetable').then(data=>{
+    if(Array.isArray(data)){
+      const grouped={};
+      data.forEach(entry=>{
+        if(!grouped[entry.class]) grouped[entry.class]=[];
+        let row=grouped[entry.class].find(r=>r.time===entry.time);
+        const dayMap={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat'};
+        const reverseDayMap={Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday'};
+        const shortDay=dayMap[entry.day]||entry.day;
+        if(!row){
+          row={time:entry.time,Mon:'',Tue:'',Wed:'',Thu:'',Fri:''};
+          grouped[entry.class].push(row);
+        }
+        row[shortDay]=entry.subject+(entry.teacher?' ('+entry.teacher+')':'')+(entry.room?' ['+entry.room+']':'');
+      });
+      setClassTimetables(grouped);
+    }
+  }).catch(()=>{});
+},[]);
   const ttEntries=(classTimetables&&classTimetables[ttClass])||[];
   const setTtEntries=(updater)=>{
     setClassTimetables(prev=>{
@@ -89,6 +110,11 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   // ── Announcements ──
   const anns=adminAnns;
   const setAnns=setAdminAnns;
+  useEffect(()=>{
+  apiCall('/announcements').then(data=>{
+    if(Array.isArray(data)) setAnns(data.map(a=>({...a,id:a._id,time:a.scheduled&&a.schedDate?`Scheduled: ${a.schedDate}`:'Just now',color:'#C0392B'})));
+  }).catch(()=>{});
+},[]);
   const [aTitle,setATitle]=useState('');
   const [aMsg,setAMsg]=useState('');
   const [aAud,setAAud]=useState('All Students & Teachers');
@@ -215,10 +241,20 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
 
   // ── Timetable Helpers ──
   const dayMap={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat'};
-  const addTtEntry=()=>{
-    if(!ttSubject.trim()){ showToast('Enter subject name'); return; }
-    if(!ttClass.trim()){ showToast('Enter class name'); return; }
-    const slot=ttSlot.trim()||'08:00-09:30';
+  const reverseDayMap={Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday'};
+const addTtEntry=async()=>{
+  if(!ttSubject.trim()){ showToast('Enter subject name'); return; }
+  if(!ttClass.trim()){ showToast('Enter class name'); return; }
+  const slot=ttSlot.trim()||'08:00-09:30';
+  try{
+    await apiCall('/timetable','POST',{
+      class:ttClass,
+      day:ttDay,
+      time:slot,
+      subject:ttSubject,
+      teacher:ttTeacher,
+      room:ttRoom
+    });
     const shortDay=dayMap[ttDay]||ttDay;
     const cellVal=ttSubject+(ttTeacher?' ('+ttTeacher+')':'')+(ttRoom?' ['+ttRoom+']':'');
     setTtEntries(prev=>{
@@ -229,15 +265,28 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
       return [...prev,newRow].sort((a,b)=>a.time.localeCompare(b.time));
     });
     if(setTtChangelog) setTtChangelog(prev=>[{id:Date.now(),cls:ttClass,time:slot,day:shortDay,subject:cellVal,ts:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})},...prev.slice(0,19)]);
-    showToast('Timetable updated! Changes synced to student/teacher dashboards.');
+    showToast('Timetable saved to database!');
     setTtSubject('');setTtTeacher('');setTtRoom('');
-  };
+  }catch(err){
+    showToast('Error saving timetable.');
+  }
+};
 
-  const clearTtSlot=(rowTime,day)=>{
-    const shortDay=dayMap[day]||day;
-    setTtEntries(prev=>prev.map(r=>r.time===rowTime?{...r,[shortDay]:''}:r));
-    showToast('Slot cleared.');
-  };
+  const clearTtSlot=async(rowTime,day,cls)=>{
+  try{
+    const fullDay=reverseDayMap[day]||day;
+    await apiCall(`/timetable/${encodeURIComponent(cls)}/${fullDay}/${encodeURIComponent(rowTime)}`,'DELETE');
+    setClassTimetables(prev=>{
+      const updated={...prev};
+      updated[cls]=(updated[cls]||[]).map(r=>r.time===rowTime?{...r,[day]:''}:r);
+      return updated;
+    });
+    showToast('Slot cleared from database.');
+  }catch(err){
+    console.error('Clear slot error:', err);
+    showToast('Error clearing slot.');
+  }
+};
 
   // ── Results Helpers ──
   const totalAppeared=resultRows.reduce((a,r)=>a+r.appeared,0);
@@ -262,15 +311,36 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   const deleteResult=(id)=>{ setResultRows(prev=>prev.filter(r=>r.id!==id)); showToast('Deleted.'); };
 
   // ── Announcement Helpers ──
-  const sendAnn=(scheduled=false)=>{
+  
+const sendAnn=async(scheduled=false)=>{
     if(!aTitle.trim()||!aMsg.trim()){ showToast('Fill title and message'); return; }
     const finalAud=aAud==='Specific Class'&&aCustomClass.trim()?`Class: ${aCustomClass}`:aAud;
-    setAnns(p=>[{id:Date.now(),title:aTitle,audience:finalAud,msg:aMsg,time:scheduled&&schedDate?`Scheduled: ${schedDate}`:'Just now',color:'#C0392B',scheduled},...p]);
-    setATitle('');setAMsg('');setACustomClass('');setSchedDate('');
-    showToast(scheduled?`Announcement scheduled!`:`Announcement sent to ${finalAud}!`);
-  };
-
-  const delAnn=(id)=>{ setAnns(p=>p.filter(a=>a.id!==id)); showToast('Deleted.'); };
+    try{
+      const data=await apiCall('/announcements','POST',{
+        title:aTitle,
+        msg:aMsg,
+        audience:finalAud,
+        scheduled,
+        schedDate:scheduled?schedDate:''
+      });
+      if(data.ann){
+        setAnns(p=>[{...data.ann,id:data.ann._id,time:scheduled&&schedDate?`Scheduled: ${schedDate}`:'Just now',color:'#C0392B'},...p]);
+      }
+      setATitle('');setAMsg('');setACustomClass('');setSchedDate('');
+      showToast(scheduled?`Announcement scheduled!`:`Announcement sent to ${finalAud}!`);
+    }catch(err){
+      showToast('Error sending announcement.');
+    }
+};
+  const delAnn=async(id)=>{
+  try{
+    await apiCall(`/announcements/${id}`,'DELETE');
+    setAnns(p=>p.filter(a=>a.id!==id));
+    showToast('Announcement deleted from database.');
+  }catch(err){
+    showToast('Error deleting announcement.');
+  }
+};
 
   const navItems=[{id:'a-home',label:'Dashboard'},{id:'a-users',label:'Manage Users'},{id:'a-courses',label:'Course Management'},{id:'a-timetable',label:'Timetable'},{id:'a-assignments',label:'Assignments'},{id:'a-results',label:'Results'},{id:'a-perf',label:'Performance'},{id:'a-notif',label:'Announcements'},{id:'a-monitor',label:'System Monitor'}];
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
@@ -461,7 +531,7 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
                             return(
                               <div key={day} className={`tt-c ${cell?['tc1','tc2','tc3','tc4','tc5'][i%5]:'tt-e'}`}
                                 style={{position:'relative',cursor:cell?'pointer':'default'}}
-                                onClick={()=>{if(cell){clearTtSlot(row.time,day);}}}>
+                                onClick={()=>{if(cell){clearTtSlot(row.time,day,cls);}}}>
                                 {cell}
                                 {isNew&&cell&&<span style={{position:'absolute',top:2,right:2,background:'#C0392B',borderRadius:3,fontSize:7,padding:'1px 3px',color:'#fff',lineHeight:1}}>NEW</span>}
                               </div>
@@ -654,12 +724,17 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
             {(()=>{
               const [editingAnn,setEditingAnn]=useState(null);
               const startEditAnn=(a)=>{ setATitle(a.title);setAMsg(a.msg||'');setAAud(a.audience);setACustomClass('');setEditingAnn(a); };
-              const updateAnn=()=>{
+              const updateAnn=async()=>{
                 if(!aTitle.trim()||!aMsg.trim()){showToast('Fill title and message');return;}
                 const finalAud=aAud==='Specific Class'&&aCustomClass.trim()?`Class: ${aCustomClass}`:aAud;
-                setAnns(p=>p.map(a=>a.id===editingAnn.id?{...a,title:aTitle,msg:aMsg,audience:finalAud,time:'Updated: '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}:a));
-                setEditingAnn(null);setATitle('');setAMsg('');setACustomClass('');
-                showToast('Announcement updated!');
+                try{
+                  await apiCall(`/announcements/${editingAnn.id}`,'PUT',{title:aTitle,msg:aMsg,audience:finalAud});
+                  setAnns(p=>p.map(a=>a.id===editingAnn.id?{...a,title:aTitle,msg:aMsg,audience:finalAud,time:'Updated: '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}:a));
+                  setEditingAnn(null);setATitle('');setAMsg('');setACustomClass('');
+                  showToast('Announcement updated in database!');
+                }catch(err){
+                  showToast('Error updating announcement.');
+                }
               };
               return(<>
                 <div className="card">

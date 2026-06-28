@@ -7,8 +7,9 @@ const studentSchema = new mongoose.Schema({
   dept: { type: String, required: true },
   phone: { type: String },
   password: { type: String },
-  googleId: { type: String },
-  photo: { type: String },
+  attend: { type: Number, default: 100 },
+  marks: { type: Number, default: 0 },
+  grade: { type: String, default: 'N/A' },
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
 }, { timestamps: true });
 
