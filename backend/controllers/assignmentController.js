@@ -19,6 +19,25 @@ exports.getAssignments = async (req, res) => {
     res.status(500).json({ message: 'Server error', error });
   }
 };
+exports.getAllAssignments = async (req, res) => {
+  try {
+    const assignments = await Assignment.find().populate('teacher', 'name').sort({ createdAt: -1 });
+    res.status(200).json(assignments);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+exports.updateAssignmentStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const assignment = await Assignment.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+    res.status(200).json({ message: 'Assignment status updated', assignment });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
 
 exports.submitAssignment = async (req, res) => {
   try {

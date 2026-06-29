@@ -97,12 +97,17 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   };
 
   // ── Results ──
-  const [resultRows,setResultRows]=useState([
-    {id:1,cls:'FSc Pre-Eng Sec A',avgMarks:82,passRate:98,topStudent:'Sara Khan',distinctions:18,appeared:200,status:'Published'},
-    {id:2,cls:'FSc Pre-Eng Sec B',avgMarks:76,passRate:95,topStudent:'Ali Hassan',distinctions:12,appeared:195,status:'Published'},
-    {id:3,cls:'FSc Pre-Med Sec A',avgMarks:79,passRate:97,topStudent:'Laiba Noor',distinctions:15,appeared:180,status:'Published'},
-    {id:4,cls:'ICS Sec A',avgMarks:74,passRate:93,topStudent:'Hamza Khan',distinctions:9,appeared:160,status:'Published'},
-  ]);
+  const [resultRows,setResultRows]=useState([]);
+
+  // Fetch Class Results from MongoDB
+  useEffect(()=>{
+    apiCall('/classresults')
+      .then(data=>{
+        if(Array.isArray(data)) setResultRows(data.map(r=>({...r,id:r._id})));
+        else setResultRows([]);
+      })
+      .catch(()=>setResultRows([]));
+  },[]);
   const [editingResult,setEditingResult]=useState(null);
   const [showAddResult,setShowAddResult]=useState(false);
   const [newResult,setNewResult]=useState({cls:'',avgMarks:'',passRate:'',topStudent:'',distinctions:'',appeared:'',status:'Published'});
@@ -294,22 +299,51 @@ const addTtEntry=async()=>{
   const avgPass=resultRows.length?Math.round(resultRows.reduce((a,r)=>a+r.passRate,0)/resultRows.length):0;
   const totalDistinctions=resultRows.reduce((a,r)=>a+r.distinctions,0);
 
-  const saveEditResult=()=>{
-    setResultRows(prev=>prev.map(r=>r.id===editingResult.id?{...r,...editingResult}:r));
-    setEditingResult(null); showToast('Result updated!');
+  const saveEditResult=async()=>{
+    try{
+      const data=await apiCall(`/classresults/${editingResult.id}`,'PUT',editingResult);
+      if(data.result){
+        setResultRows(prev=>prev.map(r=>r.id===editingResult.id?{...data.result,id:data.result._id}:r));
+      }
+      setEditingResult(null); showToast('Result updated in database!');
+    }catch(err){
+      showToast('Error updating result.');
+    }
   };
 
-  const addResultRow=()=>{
+  const addResultRow=async()=>{
     if(!newResult.cls.trim()){ showToast('Enter class name'); return; }
     const duplicate=resultRows.some(r=>r.cls.trim().toLowerCase()===newResult.cls.trim().toLowerCase());
     if(duplicate){ showToast('This class result already exists!'); return; }
-    setResultRows(prev=>[...prev,{...newResult,id:Date.now(),avgMarks:Number(newResult.avgMarks)||0,passRate:Number(newResult.passRate)||0,distinctions:Number(newResult.distinctions)||0,appeared:Number(newResult.appeared)||0}]);
-    setNewResult({cls:'',avgMarks:'',passRate:'',topStudent:'',distinctions:'',appeared:'',status:'Published'});
-    setShowAddResult(false); showToast('Class result added!');
+    try{
+      const data=await apiCall('/classresults','POST',{
+        cls:newResult.cls,
+        avgMarks:Number(newResult.avgMarks)||0,
+        passRate:Number(newResult.passRate)||0,
+        topStudent:newResult.topStudent,
+        distinctions:Number(newResult.distinctions)||0,
+        appeared:Number(newResult.appeared)||0,
+        status:newResult.status
+      });
+      if(data.result){
+        setResultRows(prev=>[...prev,{...data.result,id:data.result._id}]);
+      }
+      setNewResult({cls:'',avgMarks:'',passRate:'',topStudent:'',distinctions:'',appeared:'',status:'Published'});
+      setShowAddResult(false); showToast('Class result added to database!');
+    }catch(err){
+      showToast('Error adding class result.');
+    }
   };
 
-  const deleteResult=(id)=>{ setResultRows(prev=>prev.filter(r=>r.id!==id)); showToast('Deleted.'); };
-
+  const deleteResult=async(id)=>{
+    try{
+      await apiCall(`/classresults/${id}`,'DELETE');
+      setResultRows(prev=>prev.filter(r=>r.id!==id));
+      showToast('Deleted from database.');
+    }catch(err){
+      showToast('Error deleting.');
+    }
+  };
   // ── Announcement Helpers ──
   
 const sendAnn=async(scheduled=false)=>{
@@ -621,12 +655,41 @@ const sendAnn=async(scheduled=false)=>{
           <div className={`panel ${activePane==='a-assignments'?'active':''}`}>
             {(()=>{
               const [aAssignTab,setAAssignTab]=useState('overview');
-              const [adminAssignments,setAdminAssignments]=useState([
-                {id:1,teacher:'Sir Asif Mehmood',subject:'Mathematics',cls:'FSc Pre-Eng Sec B',topic:'Chapter 5 — Polynomials',dueDate:'15 Apr 2026',status:'Active',submissions:3,total:6},
-                {id:2,teacher:"Ma'am Zara Malik",subject:'Biology',cls:'FSc Pre-Med Sec A',topic:'Cell Division Notes',dueDate:'18 Apr 2026',status:'Active',submissions:5,total:8},
-              ]);
-              const removeAssign=(id)=>{ setAdminAssignments(prev=>prev.map(a=>a.id===id?{...a,status:'Removed'}:a)); showToast('Assignment removed.'); };
-              const approveAssign=(id)=>{ setAdminAssignments(prev=>prev.map(a=>a.id===id?{...a,status:'Approved'}:a)); showToast('Assignment approved!'); };
+              const [adminAssignments,setAdminAssignments]=useState([]);
+
+              useEffect(()=>{
+                apiCall('/assignments')
+                  .then(data=>{
+                    if(Array.isArray(data)){
+                      setAdminAssignments(data.map(a=>({
+                        id:a._id,
+                        teacher:a.teacher?.name||'Unknown',
+                        subject:a.subject,
+                        cls:a.class,
+                        topic:a.title,
+                        dueDate:new Date(a.dueDate).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
+                        status:a.status||'Active',
+                        submissions:a.submissions?a.submissions.length:0,
+                        total:a.submissions?a.submissions.length:0
+                      })));
+                    } else setAdminAssignments([]);
+                  })
+                  .catch(()=>setAdminAssignments([]));
+              },[]);
+              const removeAssign=async(id)=>{
+                try{
+                  await apiCall(`/assignments/${id}/status`,'PUT',{status:'Removed'});
+                  setAdminAssignments(prev=>prev.map(a=>a.id===id?{...a,status:'Removed'}:a));
+                  showToast('Assignment removed in database.');
+                }catch(err){ showToast('Error removing assignment.'); }
+              };
+              const approveAssign=async(id)=>{
+                try{
+                  await apiCall(`/assignments/${id}/status`,'PUT',{status:'Approved'});
+                  setAdminAssignments(prev=>prev.map(a=>a.id===id?{...a,status:'Approved'}:a));
+                  showToast('Assignment approved in database!');
+                }catch(err){ showToast('Error approving assignment.'); }
+              };
               const totalAssignments=adminAssignments.length;
               const totalSubmitted=adminAssignments.reduce((sum,a)=>sum+a.submissions,0);
               const totalStudentsA=adminAssignments.reduce((sum,a)=>sum+a.total,0);
@@ -790,21 +853,56 @@ const sendAnn=async(scheduled=false)=>{
           <div className={`panel ${activePane==='a-courses'?'active':''}`}>
             {(()=>{
               const [adminCourseTab,setAdminCourseTab]=useState('list');
-              const [adminCourses,setAdminCourses]=useState([
-                {id:1,name:'Mathematics',teacher:'Sir Asif Mehmood',class:'FSc Pre-Eng Sec B',chapters:12,chapDone:7,status:'Active'},
-                {id:2,name:'Biology',teacher:"Ma'am Zara Malik",class:'FSc Pre-Med Sec A',chapters:14,chapDone:10,status:'Active'},
-                {id:3,name:'Physics',teacher:'Sir Bilal Ahmed',class:'ICS Sec A',chapters:11,chapDone:4,status:'Active'},
-              ]);
+              const [adminCourses,setAdminCourses]=useState([]);
+              const [loadingCourses,setLoadingCourses]=useState(true);
+
+              useEffect(()=>{
+                apiCall('/courses')
+                  .then(data=>{
+                    if(Array.isArray(data)) setAdminCourses(data.map(c=>({...c,id:c._id})));
+                    else setAdminCourses([]);
+                  })
+                  .catch(()=>setAdminCourses([]))
+                  .finally(()=>setLoadingCourses(false));
+              },[]);
               const [newAC,setNewAC]=useState({name:'',teacher:'',class:'',chapters:'',chapDone:'',status:'Active'});
               const [editAC,setEditAC]=useState(null);
-              const saveAC=()=>{
+              const saveAC=async()=>{
                 if(!newAC.name||!newAC.class){showToast('Fill Course Name and Class');return;}
-                if(editAC){ setAdminCourses(p=>p.map(c=>c.id===editAC.id?{...c,...newAC,chapters:parseInt(newAC.chapters)||0,chapDone:parseInt(newAC.chapDone)||0}:c)); setEditAC(null); showToast('Course updated!'); }
-                else { setAdminCourses(p=>[...p,{...newAC,id:Date.now(),chapters:parseInt(newAC.chapters)||0,chapDone:parseInt(newAC.chapDone)||0}]); showToast('Course added!'); }
+                const payload={
+                  name:newAC.name,
+                  teacher:newAC.teacher,
+                  class:newAC.class,
+                  chapters:parseInt(newAC.chapters)||0,
+                  chapDone:parseInt(newAC.chapDone)||0,
+                  status:newAC.status
+                };
+                try{
+                  if(editAC){
+                    const updated=await apiCall(`/courses/${editAC.id}`,'PUT',payload);
+                    setAdminCourses(p=>p.map(c=>c.id===editAC.id?{...updated,id:updated._id}:c));
+                    setEditAC(null);
+                    showToast('Course updated!');
+                  } else {
+                    const created=await apiCall('/courses','POST',payload);
+                    setAdminCourses(p=>[...p,{...created,id:created._id}]);
+                    showToast('Course added!');
+                  }
+                }catch(err){
+                  showToast('Error saving course');
+                }
                 setNewAC({name:'',teacher:'',class:'',chapters:'',chapDone:'',status:'Active'});
                 setAdminCourseTab('list');
               };
-              const delAC=(id)=>{setAdminCourses(p=>p.filter(c=>c.id!==id));showToast('Course deleted.');};
+              const delAC=async(id)=>{
+                try{
+                  await apiCall(`/courses/${id}`,'DELETE');
+                  setAdminCourses(p=>p.filter(c=>c.id!==id));
+                  showToast('Course deleted.');
+                }catch(err){
+                  showToast('Error deleting course');
+                }
+              };
               return(<>
                 <div className="tab-row">{[['list','📚 Courses'],['add',editAC?'✏️ Edit':'➕ Add']].map(([t,l])=><button key={t} className={`tab-btn ${adminCourseTab===t?'active':''}`} onClick={()=>{setAdminCourseTab(t);if(t!=='add')setEditAC(null);}}>{l}</button>)}</div>
                 {adminCourseTab==='list'&&(
