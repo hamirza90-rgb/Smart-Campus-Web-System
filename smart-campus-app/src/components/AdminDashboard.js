@@ -127,24 +127,34 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   const [schedDate,setSchedDate]=useState('');
 
   // ── System Monitor ──
-  const [sysRes,setSysRes]=useState({cpu:0,ram:0,disk:58,net:23});
-  const [sessionCount,setSessionCount]=useState(Math.floor(Math.random()*50)+100);
+  const [sysRes,setSysRes]=useState({cpu:0,ram:0,disk:0,net:0});
+  const [sessionCount,setSessionCount]=useState(0);
+  const [serverStatus,setServerStatus]=useState('Checking...');
+  const [dbStatus,setDbStatus]=useState('Checking...');
+  const [uptimeHours,setUptimeHours]=useState(0);
 
-  React.useEffect(()=>{
-    const update=()=>{
-      let ram=50, cpu=30;
-      try{
-        if(navigator.deviceMemory){ ram=Math.min(95,Math.max(20,100-navigator.deviceMemory*8+Math.random()*10)); }
-        else { ram=55+Math.random()*20; }
-        cpu=25+Math.random()*40;
-      }catch(e){ ram=60+Math.random()*15; cpu=30+Math.random()*30; }
-      setSysRes({cpu:Math.round(cpu),ram:Math.round(ram),disk:58+Math.round(Math.random()*4),net:20+Math.round(Math.random()*15)});
+  useEffect(()=>{
+    const fetchHealth=()=>{
+      apiCall('/system/health')
+        .then(data=>{
+          setSysRes({cpu:data.cpuPercent||0, ram:data.ramPercent||0, disk:data.diskPercent||0, net:data.netPercent||0});
+          setServerStatus(data.serverStatus||'Offline');
+          setDbStatus(data.dbStatus||'Unknown');
+          setUptimeHours(data.uptimeHours||0);
+        })
+        .catch(()=>{
+          setServerStatus('Offline');
+          setDbStatus('Disconnected');
+        });
     };
-    update();
-    const iv=setInterval(update,4000);
+    fetchHealth();
+    const iv=setInterval(fetchHealth,4000);
     return()=>clearInterval(iv);
   },[]);
 
+  useEffect(()=>{
+    setSessionCount(allStudents.length+allTeachers.length);
+  },[allStudents,allTeachers]);
   const [paneVisits,setPaneVisits]=useState({Attendance:0,Assignments:0,Results:0,Notifications:0});
   const handlePaneChange=(id)=>{
     setActivePane(id);
@@ -948,14 +958,14 @@ const sendAnn=async(scheduled=false)=>{
           {/* ── SYSTEM MONITOR ── */}
           <div className={`panel ${activePane==='a-monitor'?'active':''}`}>
             <div className="analy-grid" style={{gridTemplateColumns:'repeat(3,1fr)'}}>
-              <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>Online</div><div className="analy-lab">Server Status</div></div>
+              <div className="analy-card"><div className="analy-val" style={{color:serverStatus==='Online'?'#4ade80':'#f87171'}}>{serverStatus}</div><div className="analy-lab">Server Status</div></div>
               <div className="analy-card"><div className="analy-val">{sessionCount}</div><div className="analy-lab">Active Sessions</div></div>
-              <div className="analy-card"><div className="analy-val">99.9%</div><div className="analy-lab">Uptime</div></div>
+              <div className="analy-card"><div className="analy-val">{uptimeHours}h</div><div className="analy-lab">Uptime</div></div>
             </div>
             <div style={{background:'rgba(29,131,72,0.07)',border:'1px solid rgba(29,131,72,0.18)',borderRadius:8,padding:'8px 14px',marginBottom:12,fontSize:10.5,color:'rgba(255,255,255,0.4)',display:'flex',gap:10,alignItems:'center'}}>
               <span>☁️</span>
-              <span><strong style={{color:'#4ade80'}}>MongoDB Atlas</strong> — Cloud database connected. Students: {allStudents.length} | Teachers: {allTeachers.length}</span>
-              <span className="badge bg" style={{fontSize:8,flexShrink:0}}>Online</span>
+              <span><strong style={{color:dbStatus==='Connected'?'#4ade80':'#f87171'}}>MongoDB Atlas</strong> — {dbStatus==='Connected'?'Cloud database connected.':'Database disconnected!'} Students: {allStudents.length} | Teachers: {allTeachers.length}</span>
+              <span className={`badge ${dbStatus==='Connected'?'bg':'br'}`} style={{fontSize:8,flexShrink:0}}>{dbStatus}</span>
             </div>
             <div className="twoC">
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>System Resources (Live)</div>
