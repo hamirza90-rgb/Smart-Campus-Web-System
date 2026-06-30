@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { initMockData, getGradeColor, getStatusColor } from '../mockData';
 import { PGCLogo, Toast } from './homepage';
 
@@ -9,6 +10,59 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [attData,setAttData]=useState({});
   const [tab,setTab]=useState('pending');
   const [students,setStudents]=useState(initMockData.teacher.students);
+  const [realCourses, setRealCourses] = useState([]);
+useEffect(()=>{
+  const token = localStorage.getItem('token');
+  fetch('http://localhost:5000/api/courses', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) setRealCourses(data);
+    })
+    .catch(() => {});
+}, []);
+const [homeAttendance, setHomeAttendance] = useState([]);
+useEffect(()=>{
+  const token = localStorage.getItem('token');
+  const classNames = realCourses.length > 0 ? realCourses.map(c => c.class) : myClasses.map(c => c.name);
+  Promise.all(
+    classNames.map(cls =>
+      fetch(`http://localhost:5000/api/attendance/class/${encodeURIComponent(cls)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(res => res.json()).catch(() => [])
+    )
+  ).then(results => {
+    const allRecords = results.flat();
+    setHomeAttendance(allRecords);
+  });
+}, [realCourses]);
+const homeAvgAttendance = (() => {
+  if (homeAttendance.length === 0) return 0;
+  const totalPresent = homeAttendance.filter(r => r.status === 'P').length;
+  return Math.round((totalPresent / homeAttendance.length) * 100);
+})();
+const [homeResults, setHomeResults] = useState([]);
+useEffect(()=>{
+  const token = localStorage.getItem('token');
+  const classNames = realCourses.length > 0 ? realCourses.map(c => c.class) : myClasses.map(c => c.name);
+  Promise.all(
+    classNames.map(cls =>
+      fetch(`http://localhost:5000/api/results/class/${encodeURIComponent(cls)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(res => res.json()).catch(() => [])
+    )
+  ).then(results => {
+    setHomeResults(results.flat());
+  });
+}, [realCourses]);
+const topStudentsWithMarks = students.map(s => {
+  const studentResults = homeResults.filter(r => r.student && (r.student._id === s._id));
+  const avgPercentage = studentResults.length > 0
+  ? Math.round(studentResults.reduce((sum, r) => sum + Number(r.percentage), 0) / studentResults.length)
+  : 0;
+  return { ...s, marks: avgPercentage };
+}).sort((a,b) => b.marks - a.marks);
   useEffect(()=>{
   const token = localStorage.getItem('token');
   fetch('http://localhost:5000/api/students', {
@@ -53,7 +107,13 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
     setRealScannerOpen(true);
   };
   const closeRealScanner=()=>{
-    if(html5QrCodeRef.current){ html5QrCodeRef.current.stop().catch(()=>{}); html5QrCodeRef.current=null; }
+    if(html5QrCodeRef.current){
+      try{
+        const state=html5QrCodeRef.current.getState ? html5QrCodeRef.current.getState() : null;
+        if(state===2){ html5QrCodeRef.current.stop().catch(()=>{}); }
+      }catch(e){}
+      html5QrCodeRef.current=null;
+    }
     setRealScannerOpen(false);
     setActiveScanStudent(null);
     setCamError(false);
@@ -88,11 +148,20 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
     const stopScanner=()=>{
       if(isStopping||!html5QrCode) return;
       isStopping=true;
-      html5QrCode.stop().catch(()=>{}).finally(()=>{ html5QrCode=null; html5QrCodeRef.current=null; });
+      try{
+        const state=html5QrCode.getState ? html5QrCode.getState() : null;
+        if(state===2){ // SCANNING state
+          html5QrCode.stop().catch(()=>{}).finally(()=>{ html5QrCode=null; html5QrCodeRef.current=null; });
+        } else {
+          html5QrCode=null; html5QrCodeRef.current=null;
+        }
+      }catch(e){
+        html5QrCode=null; html5QrCodeRef.current=null;
+      }
     };
     const startScanner=()=>{
       if(html5QrCodeRef.current) return;
-      html5QrCode=new window.Html5Qrcode('att-qr-reader');
+      html5QrCode=new Html5Qrcode('att-qr-reader');
       html5QrCodeRef.current=html5QrCode;
       const expectedQR=`${activeScanStudent.roll}_${activeScanStudent.name}`;
       const onScanSuccess=(decodedText)=>{
@@ -157,18 +226,18 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
           {/* HOME */}
           <div className={`panel ${activePane==='t-home'?'active':''}`}>
             <div className="sg">
-              {[['My Classes','3','Active','#1D9E75'],['Students',students.length,'Total','#2471A3'],['Assignments','8','Active','#D4AC0D'],['Avg Attendance','82%','This term','#7F77DD']].map(([l,v,s,c])=>(<div className="sc" key={l} style={{cursor:'pointer'}}><div className="sc-l">{l}</div><div className="sc-v" style={{color:c}}>{v}</div><div className="sc-s">{s}</div></div>))}
+              {[['My Classes',realCourses.length,'Active','#1D9E75'],['Students',students.length,'Total','#2471A3'],['Assignments','8','Active','#D4AC0D'],['Avg Attendance',`${homeAvgAttendance}%`,'This term','#7F77DD']].map(([l,v,s,c])=>(<div className="sc" key={l} style={{cursor:'pointer'}}><div className="sc-l">{l}</div><div className="sc-v" style={{color:c}}>{v}</div><div className="sc-s">{s}</div></div>))}
             </div>
             <div className="twoC">
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>My Classes</div>
-                {d.classes.map(c=>(<div className="ri" key={c.name}><div><div className="rm">{c.name}</div><div className="rs">{c.subject} · {c.students} students</div></div><span className="badge bg">Active</span></div>))}
+                {realCourses.length>0 ? realCourses.map(c=>(<div className="ri" key={c._id}><div><div className="rm">{c.class}</div><div className="rs">{c.name} · Teacher: {c.teacher}</div></div><span className={`badge ${c.status==='Active'?'bg':'bb'}`}>{c.status}</span></div>)) : <div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'12px 0'}}>No courses yet.</div>}
               </div>
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>Pending Assignments</div>
                 {initMockData.student.assignments.filter(a=>a.status==='Pending').map(a=>(<div className="ri" key={a.id}><div><div className="rm">{a.subject} – {a.title}</div><div className="rs">Due: {a.due}</div></div><button className="badge br" style={{border:'none',cursor:'pointer',background:'rgba(192,57,43,0.2)',color:'#f87171'}} onClick={()=>setActivePane('t-assign')}>Review →</button></div>))}
               </div>
             </div>
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Top Students</div>
-              {students.sort((a,b)=>b.marks-a.marks).slice(0,4).map(s=>(<div className="user-row" key={s.name}><div className="user-av" style={{background:'rgba(36,113,163,0.3)'}}>{s.name[0]}</div><div><div className="user-name">{s.name}</div><div className="user-detail">{s.roll}</div></div><div style={{marginLeft:'auto',textAlign:'right'}}><div className="user-name">{s.marks}% · <span className={`badge ${getGradeColor(s.grade)}`} style={{fontSize:9}}>{s.grade}</span></div><div className="perf-mini"><div className="perf-bar"><div className="perf-fill" style={{width:`${s.marks}%`,background:'#2471A3'}}/></div><span className="user-detail">Att: {s.attend}%</span></div></div></div>))}
+              {topStudentsWithMarks.slice(0,4).map(s=>(<div className="user-row" key={s.name}><div className="user-av" style={{background:'rgba(36,113,163,0.3)'}}>{s.name[0]}</div><div><div className="user-name">{s.name}</div><div className="user-detail">{s.roll}</div></div><div style={{marginLeft:'auto',textAlign:'right'}}><div className="user-name">{s.marks}% · <span className={`badge ${getGradeColor(s.grade)}`} style={{fontSize:9}}>{s.grade}</span></div><div className="perf-mini"><div className="perf-bar"><div className="perf-fill" style={{width:`${s.marks}%`,background:'#2471A3'}}/></div><span className="user-detail">Att: {s.attend}%</span></div></div></div>))}
             </div>
             {adminAnnsForTeacher.length>0&&(
               <div className="card">
