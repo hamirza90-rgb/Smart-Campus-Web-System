@@ -9,6 +9,26 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [attData,setAttData]=useState({});
   const [tab,setTab]=useState('pending');
   const [students,setStudents]=useState(initMockData.teacher.students);
+  useEffect(()=>{
+  const token = localStorage.getItem('token');
+  fetch('http://localhost:5000/api/students', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setStudents(data.map(s => ({
+          _id: s._id,
+          name: s.name,
+          roll: s.roll,
+          attend: s.attend || 0,
+          marks: s.marks || 0,
+          grade: s.grade || 'N/A'
+        })));
+      }
+    })
+    .catch(() => {});
+}, []);
   const [searchTerm,setSearchTerm]=useState('');
   const [showAddStudent,setShowAddStudent]=useState(false);
   const [newStudent,setNewStudent]=useState({name:'',roll:'',attend:100,marks:0,grade:'A'});
@@ -815,7 +835,10 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
               const [examType,setExamType]=useState('Monthly Test');
               const [examClass,setExamClass]=useState(myClasses[0]?.name||'FSc Pre-Eng Sec A');
               const [totalMarks,setTotalMarks]=useState(100);
-              const [resultRows,setResultRows]=useState(students.map(s=>({name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
+              const [resultRows,setResultRows]=useState(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
+              useEffect(()=>{
+  setResultRows(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
+},[students]);
               const [showAddRow,setShowAddRow]=useState(false);
               const [newRow,setNewRow]=useState({name:'',roll:'',marks:0});
               const [editIdx,setEditIdx]=useState(null);
@@ -826,7 +849,31 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
               const deleteRow=(i)=>{ setResultRows(prev=>prev.filter((_,idx)=>idx!==i)); showToast('Student removed from result.','🗑'); };
               const startEdit=(i)=>{ setEditIdx(i); setEditRow({...resultRows[i]}); };
               const saveEdit=()=>{ const m=Math.min(Number(editRow.marks)||0,totalMarks); setResultRows(prev=>{ const r=[...prev]; r[editIdx]={...editRow,marks:m,grade:calcGrade(m,totalMarks)}; return r; }); setEditIdx(null); setEditRow(null); showToast('Result updated!'); };
-              const saveAndDownload=()=>{
+              const saveAndDownload= async ()=>{
+                // Backend pe save karo — har student ke liye alag entry
+                try {
+                  const token = localStorage.getItem('token');
+                  for (const r of resultRows) {
+                    if (!r._id) continue;
+                    await fetch('http://localhost:5000/api/results', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        student: r._id,
+                        class: examClass,
+                        month: new Date().toLocaleString('en-GB',{month:'long'}),
+                        year: new Date().getFullYear(),
+                        subjects: [{ name: examType, totalMarks, obtainedMarks: r.marks }]
+                      })
+                    });
+                  }
+                  showToast('✅ Result MongoDB mein save ho gaya!');
+                } catch(e) {
+                  showToast('⚠️ Backend save nahi hua');
+                }
                 const date=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
                 const rowsHtml=resultRows.map((r,i)=>{
                   const pct=Math.round(r.marks/totalMarks*100);
@@ -1602,13 +1649,12 @@ useEffect(() => {
   })
   .catch(() => {});
 }, [analyticsClass]);
-
-// Real attendance calculate karo
+              const avgMarks=classStudents.length?Math.round(classStudents.reduce((a,s)=>a+s.marks,0)/classStudents.length):0;
+              const avgAttendance=classStudents.length?Math.round(classStudents.reduce((a,s)=>a+s.attend,0)/classStudents.length):0;
+              // Real attendance calculate karo
 const realAvgAtt = realAttendance.length > 0
   ? Math.round(realAttendance.filter(r => r.status === 'P').length / realAttendance.length * 100)
   : avgAttendance;
-              const avgMarks=classStudents.length?Math.round(classStudents.reduce((a,s)=>a+s.marks,0)/classStudents.length):0;
-              const avgAttendance=classStudents.length?Math.round(classStudents.reduce((a,s)=>a+s.attend,0)/classStudents.length):0;
               const passCount=classStudents.filter(s=>s.marks>=40).length;
               const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
               const monthlyAtt=months.map((m,i)=>({month:m,pct:Math.max(60,Math.min(98,avgAttendance+Math.round(Math.sin(i)*8)))}));
