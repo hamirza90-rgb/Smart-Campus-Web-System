@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { initMockData, getGradeColor, getStatusColor } from '../mockData';
 import { PGCLogo, Toast } from './homepage';
+const API = 'http://localhost:5000/api';
+const getToken = () => localStorage.getItem('token');
+const apiCall = async (endpoint, method = 'GET', body = null) => {
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${getToken()}`
+    }
+  };
+  if (body) options.body = JSON.stringify(body);
+  const res = await fetch(`${API}${endpoint}`, options);
+  return res.json();
+};
 
 // ══ QR CODE ══
 function QRCode({scanning}){
@@ -14,11 +28,16 @@ function QRCode({scanning}){
     </div>
   );
 }
-
+function generateUniqueQRText(student){
+  const today=new Date().toISOString().split('T')[0];
+  return `PGC-ATTEND|${student.roll}|${student.name}|${today}`;
+}
 function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,teacherNotifs}){
   const [activePane,setActivePane]=useState('s-home');
   const [toast,setToast]=useState(null);
   const [data,setData]=useState(initMockData.student);
+  const [realAssignments,setRealAssignments]=useState([]);
+  const [loadingAssignments,setLoadingAssignments]=useState(true);
   const [notifications,setNotifications]=useState(initMockData.student.notifications);
   const [qrScanning,setQrScanning]=useState(false);
   const [qrScanned,setQrScanned]=useState(false);
@@ -31,6 +50,25 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [newCourse,setNewCourse]=useState({name:'',teacher:'',code:'',lectures:''});
   // Merge: local + admin + teacher notifications
   const studentClass='FSc Pre-Eng Sec B';
+  useEffect(()=>{
+    apiCall(`/assignments/class/${encodeURIComponent(studentClass)}`)
+      .then(data=>{
+        if(Array.isArray(data)){
+          setRealAssignments(data.map(a=>({
+            id:a._id,
+            subject:a.subject,
+            title:a.title,
+            due:new Date(a.dueDate).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
+            instructions:a.description||'Complete and submit on time.',
+            status:'Pending',
+            total:a.totalMarks,
+            teacher:a.teacher?.name||'Unknown'
+          })));
+        } else setRealAssignments([]);
+      })
+      .catch(()=>setRealAssignments([]))
+      .finally(()=>setLoadingAssignments(false));
+  },[]);
   const adminNotifsForStudent=(adminAnns||[])
     .filter(a=>a.audience==='All Students & Teachers'||a.audience==='Students Only'||(a.audience&&a.audience.startsWith('Class:')&&a.audience.includes(studentClass)))
     .map(a=>({id:'adm_'+a.id,color:a.color||'#C0392B',text:'[Admin] '+a.title+(a.msg?': '+a.msg:''),time:a.time,read:false,_src:'admin'}));
@@ -261,7 +299,7 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
     {id:'s-perf',label:'Performance',icon:<svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" width="14" height="14"><polyline points="1,10 4,6 7,8 10,3 12,5"/></svg>},
   ];
 
-  const d=data;
+  const d={...data, assignments: realAssignments};
   const filteredAssignments=d.assignments.filter(a=>a.subject.toLowerCase().includes(searchTerm.toLowerCase())||a.title.toLowerCase().includes(searchTerm.toLowerCase()));
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
 
@@ -531,18 +569,26 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
                 if(text) setPastedText(text);
               };
 
-              const submitWithPaste=()=>{
-                if(!selAssignId&&!customSubject){ showToast('Please select an assignment or enter subject','⚠'); return; }
+              const submitWithPaste=async()=>{
+                if(!selAssignId){ showToast('Please select an assignment from the assigned list','⚠'); return; }
                 if(!pastedText&&!fileReady){ showToast('Please paste assignment content or upload a file','⚠'); return; }
-                const assignId=selAssignId||('custom_'+Date.now());
-                const subject=selAssignId?(d.assignments.find(a=>a.id==selAssignId)?.subject||customSubject):customSubject;
-                const title=selAssignId?(d.assignments.find(a=>a.id==selAssignId)?.title||customTitle):customTitle;
-                const newHistEntry={id:Date.now(),subject,title:title||'Assignment',submittedOn:new Date().toLocaleDateString('en-GB'),status:'Submitted',marks:'–',feedback:'–'};
-                setSubmissionHistory(prev=>[newHistEntry,...prev]);
-                setSubmitStatuses(prev=>({...prev,[assignId]:'Submitted'}));
-                setPastedText('');setFileReady(null);setSelAssignId('');setCustomSubject('');setCustomTitle('');setCustomDue('');
-                showToast('✅ Assignment submitted successfully!');
-                setAssignTab('history');
+                const content=fileReady||pastedText;
+                try{
+                  await apiCall(`/assignments/${selAssignId}/submit`,'POST',{
+                    studentId: user.id,
+                    fileUrl: content
+                  });
+                  const subject=d.assignments.find(a=>a.id==selAssignId)?.subject||customSubject;
+                  const title=d.assignments.find(a=>a.id==selAssignId)?.title||customTitle;
+                  const newHistEntry={id:Date.now(),subject,title:title||'Assignment',submittedOn:new Date().toLocaleDateString('en-GB'),status:'Submitted',marks:'–',feedback:'–'};
+                  setSubmissionHistory(prev=>[newHistEntry,...prev]);
+                  setSubmitStatuses(prev=>({...prev,[selAssignId]:'Submitted'}));
+                  setPastedText('');setFileReady(null);setSelAssignId('');setCustomSubject('');setCustomTitle('');setCustomDue('');
+                  showToast('✅ Assignment submitted successfully!');
+                  setAssignTab('history');
+                }catch(err){
+                  showToast('Error submitting assignment','⚠');
+                }
               };
 
               const resubmit=(entry)=>{
