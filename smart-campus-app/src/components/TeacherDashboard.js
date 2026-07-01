@@ -9,6 +9,26 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [attData,setAttData]=useState({});
   const [tab,setTab]=useState('pending');
   const [students,setStudents]=useState(initMockData.teacher.students);
+  useEffect(()=>{
+  const token = localStorage.getItem('token');
+  fetch('http://localhost:5000/api/students', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setStudents(data.map(s => ({
+          _id: s._id,
+          name: s.name,
+          roll: s.roll,
+          attend: s.attend || 0,
+          marks: s.marks || 0,
+          grade: s.grade || 'N/A'
+        })));
+      }
+    })
+    .catch(() => {});
+}, []);
   const [searchTerm,setSearchTerm]=useState('');
   const [showAddStudent,setShowAddStudent]=useState(false);
   const [newStudent,setNewStudent]=useState({name:'',roll:'',attend:100,marks:0,grade:'A'});
@@ -72,13 +92,9 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
     };
     const startScanner=()=>{
       if(html5QrCodeRef.current) return;
-      html5QrCode=new Html5Qrcode('att-qr-reader');
+      html5QrCode=new window.Html5Qrcode('att-qr-reader');
       html5QrCodeRef.current=html5QrCode;
-      const expectedQR=generateUniqueQRText({
-        id: activeScanStudent.id||activeScanStudent.roll,
-        name: activeScanStudent.name,
-        roll: activeScanStudent.roll
-      });
+      const expectedQR=`${activeScanStudent.roll}_${activeScanStudent.name}`;
       const onScanSuccess=(decodedText)=>{
         if(decodedText===expectedQR){
           stopScanner();
@@ -199,19 +215,50 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
               const remainingStudents=students.filter(s=>!scannedNames.includes(s.name));
               const filtStu=students.filter(s=>s.name.toLowerCase().includes(stuSearch.toLowerCase())||s.roll.toLowerCase().includes(stuSearch.toLowerCase()));
 
-              const submitAttendance=()=>{
-                const date=new Date(attDate).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
-                const presentNames=attStep==='scanning'?scannedNames:students.filter(s=>manualData[s.name]==='P'||(!manualData[s.name]&&attMode==='manual'?false:false)).map(s=>s.name);
-                const p=scannedNames.length;
-                const a=students.filter(s=>!scannedNames.includes(s.name)&&manualData[s.name]!=='P').length;
-                const l=students.filter(s=>manualData[s.name]==='L').length;
-                const newSession={date,class:attClass,p:attMode==='qr'?scannedNames.length:students.filter(s=>manualData[s.name]==='P').length,a:attMode==='qr'?remainingStudents.length:students.filter(s=>manualData[s.name]==='A'||!manualData[s.name]).length,l:students.filter(s=>manualData[s.name]==='L').length,mode:attMode==='qr'?'QR Scan':'Manual'};
-                setSavedSessions(prev=>[newSession,...prev.slice(0,9)]);
-                setAttSaved(prev=>[newSession,...prev.slice(0,9)]);
-                setAttStep('submitted');
-                showToast('✅ Attendance submitted for '+attClass+'!');
-              };
+              const submitAttendance = async () => {
+  const date = new Date(attDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
+  const newSession = {
+    date, class: attClass,
+    p: attMode==='qr' ? scannedNames.length : students.filter(s=>manualData[s.name]==='P').length,
+    a: attMode==='qr' ? remainingStudents.length : students.filter(s=>manualData[s.name]==='A'||!manualData[s.name]).length,
+    l: students.filter(s=>manualData[s.name]==='L').length,
+    mode: attMode==='qr' ? 'QR Scan' : 'Manual'
+  };
 
+  // Backend pe save karo
+  try {
+    const token = localStorage.getItem('token');
+    const records = students.map(s => ({
+      studentName: s.name,
+      rollNo: s.roll,
+      status: attMode==='qr'
+        ? (scannedNames.includes(s.name) ? 'P' : 'A')
+        : (manualData[s.name] || 'A')
+    }));
+
+    const res = await fetch('http://localhost:5000/api/attendance', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ class: attClass, date: attDate, records })
+    });
+
+    const data = await res.json();
+    if(res.ok){
+      showToast('✅ Attendance MongoDB mein save ho gaya!');
+    } else {
+      showToast('⚠️ ' + (data.message || 'Backend error'));
+    }
+  } catch(e) {
+    showToast('⚠️ Backend connect nahi hua');
+  }
+
+  setSavedSessions(prev=>[newSession,...prev.slice(0,9)]);
+  setAttSaved(prev=>[newSession,...prev.slice(0,9)]);
+  setAttStep('submitted');
+};
               const resetAtt=()=>{setAttStep('setup');setScannedNames([]);setManualData({});setLastScanned(null);setStuSearch('');};
 
               // STEP 1 — SETUP
@@ -347,7 +394,7 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
                           /* Scanning animation — showing the scanned student's QR */
                           <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',animation:'fadeIn 0.15s ease'}}>
                             <div style={{background:'white',padding:10,borderRadius:8,boxShadow:'0 0 30px rgba(29,131,72,0.6)',animation:'pulse 0.6s ease infinite'}}>
-                              <QRCode scanning={true}/>
+                              <div style={{width:60,height:60,background:'#fff',borderRadius:4}}></div>
                             </div>
                           </div>
                         ):(
@@ -788,7 +835,10 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
               const [examType,setExamType]=useState('Monthly Test');
               const [examClass,setExamClass]=useState(myClasses[0]?.name||'FSc Pre-Eng Sec A');
               const [totalMarks,setTotalMarks]=useState(100);
-              const [resultRows,setResultRows]=useState(students.map(s=>({name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
+              const [resultRows,setResultRows]=useState(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
+              useEffect(()=>{
+  setResultRows(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
+},[students]);
               const [showAddRow,setShowAddRow]=useState(false);
               const [newRow,setNewRow]=useState({name:'',roll:'',marks:0});
               const [editIdx,setEditIdx]=useState(null);
@@ -799,7 +849,31 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
               const deleteRow=(i)=>{ setResultRows(prev=>prev.filter((_,idx)=>idx!==i)); showToast('Student removed from result.','🗑'); };
               const startEdit=(i)=>{ setEditIdx(i); setEditRow({...resultRows[i]}); };
               const saveEdit=()=>{ const m=Math.min(Number(editRow.marks)||0,totalMarks); setResultRows(prev=>{ const r=[...prev]; r[editIdx]={...editRow,marks:m,grade:calcGrade(m,totalMarks)}; return r; }); setEditIdx(null); setEditRow(null); showToast('Result updated!'); };
-              const saveAndDownload=()=>{
+              const saveAndDownload= async ()=>{
+                // Backend pe save karo — har student ke liye alag entry
+                try {
+                  const token = localStorage.getItem('token');
+                  for (const r of resultRows) {
+                    if (!r._id) continue;
+                    await fetch('http://localhost:5000/api/results', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        student: r._id,
+                        class: examClass,
+                        month: new Date().toLocaleString('en-GB',{month:'long'}),
+                        year: new Date().getFullYear(),
+                        subjects: [{ name: examType, totalMarks, obtainedMarks: r.marks }]
+                      })
+                    });
+                  }
+                  showToast('✅ Result MongoDB mein save ho gaya!');
+                } catch(e) {
+                  showToast('⚠️ Backend save nahi hua');
+                }
                 const date=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
                 const rowsHtml=resultRows.map((r,i)=>{
                   const pct=Math.round(r.marks/totalMarks*100);
@@ -1121,9 +1195,31 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
             {(()=>{
               const [courseTab,setCourseTab]=useState('list');
               const [courses,setCourses]=useState([
-                {id:1,name:'Mathematics',code:'MATH-301',class:'FSc Pre-Eng Sec B',chapters:12,progress:7,status:'Active',desc:'Algebra, Trigonometry, Calculus basics'},
-                {id:2,name:'Mathematics',code:'MATH-302',class:'FSc Pre-Eng Sec A',chapters:12,progress:5,status:'Active',desc:'Polynomials, Sequences & Series'},
-              ]);
+  {id:1,name:'Mathematics',code:'MATH-301',class:'FSc Pre-Eng Sec B',chapters:12,progress:7,status:'Active',desc:'Algebra, Trigonometry, Calculus basics'},
+  {id:2,name:'Mathematics',code:'MATH-302',class:'FSc Pre-Eng Sec A',chapters:12,progress:5,status:'Active',desc:'Polynomials, Sequences & Series'},
+]);
+              useEffect(()=>{
+  const token=localStorage.getItem('token');
+  fetch('http://localhost:5000/api/courses',{
+    headers:{'Authorization':`Bearer ${token}`}
+  })
+  .then(res=>res.json())
+  .then(data=>{
+    if(Array.isArray(data)&&data.length>0){
+      setCourses(data.map(c=>({
+        id:c._id,
+        name:c.name,
+        code:c._id,
+        class:c.class,
+        chapters:c.chapters||0,
+        progress:c.chapDone||0,
+        status:c.status||'Active',
+        desc:c.desc||''
+      })));
+    }
+  })
+  .catch(()=>{});
+},[]);
               const [newCourse,setNewCourse]=useState({name:'',code:'',class:'',chapters:'',desc:'',status:'Active'});
               const [editingCourse,setEditingCourse]=useState(null);
               const [selCourse,setSelCourse]=useState(null);
@@ -1406,20 +1502,43 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
               const notifTypes=['Announcement','Class Cancel','Makeup Class','Assignment Due','Exam Schedule','General Reminder','Holiday Notice','Other'];
               const sendTargets=['All Students',...myClasses.map(c=>c.name),'Group A','Group B','Individual Student'];
 
-              const sendOrUpdate=()=>{
-                if(!notifTitle.trim()||!notifMsg.trim()){showToast('Fill title and message','⚠');return;}
-                if(editingNotif){
-                  setSentList(prev=>prev.map(n=>n.id===editingNotif.id?{...n,text:notifTitle+': '+notifMsg,to:notifTo,type:notifType,scheduled:!!schedDate,schedInfo:schedDate?schedDate+(schedTime?' '+schedTime:''):'',time:'Just now (edited)'}:n));
-                  if(setTeacherNotifs) setTeacherNotifs(prev=>prev.map(n=>n.id===editingNotif.id?{...n,text:notifTitle+': '+notifMsg,to:notifTo}:n));
-                  setEditingNotif(null); showToast('✅ Notification updated!');
-                } else {
-                  const newN={id:Date.now(),text:notifTitle+': '+notifMsg,time:schedDate?'Scheduled: '+schedDate+(schedTime?' '+schedTime:''):'Just now',color:notifType==='Class Cancel'?'#C0392B':notifType==='Exam Schedule'?'#D4AC0D':notifType==='Makeup Class'?'#7F77DD':'#1D9E75',to:notifTo,type:notifType,scheduled:!!schedDate,readBy:[]};
-                  setSentList(p=>[newN,...p]);
-                  if(setTeacherNotifs) setTeacherNotifs(prev=>[newN,...prev]);
-                  showToast('🔔 Notification sent to '+notifTo+(schedDate?' (Scheduled)':'')+'!');
-                }
-                setNotifTitle('');setNotifMsg('');setSchedDate('');setSchedTime('');
-              };
+              const sendOrUpdate = async () => {
+  if(!notifTitle.trim()||!notifMsg.trim()){showToast('Fill title and message','⚠');return;}
+  
+  if(editingNotif){
+    setSentList(prev=>prev.map(n=>n.id===editingNotif.id?{...n,text:notifTitle+': '+notifMsg,to:notifTo,type:notifType,time:'Just now (edited)'}:n));
+    if(setTeacherNotifs) setTeacherNotifs(prev=>prev.map(n=>n.id===editingNotif.id?{...n,text:notifTitle+': '+notifMsg}:n));
+    setEditingNotif(null); showToast('✅ Notification updated!');
+  } else {
+    // Backend pe save karo
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('http://localhost:5000/api/announcements', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: notifTitle,
+          msg: notifMsg,
+          audience: notifTo === 'All Students' ? 'All Students & Teachers' : notifTo,
+          type: notifType,
+          scheduled: !!schedDate,
+          schedDate: schedDate
+        })
+      });
+      showToast('🔔 Notification sent & saved!');
+    } catch(e) {
+      showToast('⚠️ Backend save nahi hua');
+    }
+    
+    const newN={id:Date.now(),text:notifTitle+': '+notifMsg,time:schedDate?'Scheduled: '+schedDate:'Just now',color:notifType==='Class Cancel'?'#C0392B':notifType==='Exam Schedule'?'#D4AC0D':notifType==='Makeup Class'?'#7F77DD':'#1D9E75',to:notifTo,type:notifType,scheduled:!!schedDate,readBy:[]};
+    setSentList(p=>[newN,...p]);
+    if(setTeacherNotifs) setTeacherNotifs(prev=>[newN,...prev]);
+  }
+  setNotifTitle('');setNotifMsg('');setSchedDate('');setSchedTime('');
+};
               const deleteNotif=(id)=>{setSentList(p=>p.filter(n=>n.id!==id));if(setTeacherNotifs)setTeacherNotifs(p=>p.filter(n=>n.id!==id));showToast('Deleted.','🗑');};
               const startEditNotif=(n)=>{
                 const parts=n.text.split(': ');
@@ -1514,9 +1633,28 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
           <div className={`panel ${activePane==='t-perf'?'active':''}`}>
             {(()=>{
               const [analyticsClass,setAnalyticsClass]=useState(myClasses[0]?.name||'FSc Pre-Eng Sec B');
-              const classStudents=students; // In real app, filter by class
+              const classStudents=students; 
+              // In real app, filter by class
+              const [realAttendance, setRealAttendance] = useState([]);
+
+useEffect(() => {
+  if(!analyticsClass) return;
+  const token = localStorage.getItem('token');
+  fetch(`http://localhost:5000/api/attendance/class/${encodeURIComponent(analyticsClass)}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if(Array.isArray(data)) setRealAttendance(data);
+  })
+  .catch(() => {});
+}, [analyticsClass]);
               const avgMarks=classStudents.length?Math.round(classStudents.reduce((a,s)=>a+s.marks,0)/classStudents.length):0;
               const avgAttendance=classStudents.length?Math.round(classStudents.reduce((a,s)=>a+s.attend,0)/classStudents.length):0;
+              // Real attendance calculate karo
+const realAvgAtt = realAttendance.length > 0
+  ? Math.round(realAttendance.filter(r => r.status === 'P').length / realAttendance.length * 100)
+  : avgAttendance;
               const passCount=classStudents.filter(s=>s.marks>=40).length;
               const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
               const monthlyAtt=months.map((m,i)=>({month:m,pct:Math.max(60,Math.min(98,avgAttendance+Math.round(Math.sin(i)*8)))}));
@@ -1531,7 +1669,7 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
                 </div>
 
                 <div className="analy-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
-                  <div className="analy-card"><div className="analy-val">{avgAttendance}%</div><div className="analy-lab">Avg Attendance</div></div>
+                  <div className="analy-card"><div className="analy-val">{realAvgAtt}%</div><div className="analy-lab">Avg Attendance</div></div>
                   <div className="analy-card"><div className="analy-val">{avgMarks}</div><div className="analy-lab">Avg Marks</div></div>
                   <div className="analy-card"><div className="analy-val">{passCount}/{classStudents.length}</div><div className="analy-lab">Pass / Total</div></div>
                   <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>A</div><div className="analy-lab">Class Grade</div></div>

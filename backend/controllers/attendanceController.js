@@ -2,11 +2,19 @@ const Attendance = require('../models/Attendance');
 
 exports.markAttendance = async (req, res) => {
   try {
-    const { student, teacher, date, status, subject, class: className } = req.body;
-    const attendance = await Attendance.create({ student, teacher, date, status, subject, class: className });
-    res.status(201).json({ message: 'Attendance marked', attendance });
+    const { class: className, date, records } = req.body;
+    const attendanceDocs = records.map(r => ({
+      studentName: r.studentName,
+      rollNo: r.rollNo,
+      status: r.status,
+      class: className,
+      date: date
+    }));
+    await Attendance.insertMany(attendanceDocs);
+    res.status(201).json({ message: 'Attendance saved successfully', count: attendanceDocs.length });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    console.log('Attendance Error:', error.message);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
@@ -24,7 +32,6 @@ exports.getAttendance = async (req, res) => {
 exports.getClassAttendance = async (req, res) => {
   try {
     const attendance = await Attendance.find({ class: req.params.className })
-      .populate('student', 'name roll')
       .sort({ date: -1 });
     res.status(200).json(attendance);
   } catch (error) {
