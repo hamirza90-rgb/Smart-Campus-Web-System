@@ -5,7 +5,7 @@ const assignmentSchema = new mongoose.Schema({
   description: { type: String },
   subject: { type: String, required: true },
   class: { type: String, required: true },
-  teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', required: true },
+  teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', required: false },
   dueDate: { type: Date, required: true },
   status: { type: String, enum: ['Active', 'Approved', 'Removed'], default: 'Active' },
   totalMarks: { type: Number, required: true },

@@ -63,6 +63,18 @@ const topStudentsWithMarks = students.map(s => {
   : 0;
   return { ...s, marks: avgPercentage };
 }).sort((a,b) => b.marks - a.marks);
+const [homeAssignments, setHomeAssignments] = useState([]);
+useEffect(()=>{
+  const token = localStorage.getItem('token');
+  fetch('http://localhost:5000/api/assignments', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) setHomeAssignments(data);
+    })
+    .catch(() => {});
+}, []);
   useEffect(()=>{
   const token = localStorage.getItem('token');
   fetch('http://localhost:5000/api/students', {
@@ -226,7 +238,7 @@ const topStudentsWithMarks = students.map(s => {
           {/* HOME */}
           <div className={`panel ${activePane==='t-home'?'active':''}`}>
             <div className="sg">
-              {[['My Classes',realCourses.length,'Active','#1D9E75'],['Students',students.length,'Total','#2471A3'],['Assignments','8','Active','#D4AC0D'],['Avg Attendance',`${homeAvgAttendance}%`,'This term','#7F77DD']].map(([l,v,s,c])=>(<div className="sc" key={l} style={{cursor:'pointer'}}><div className="sc-l">{l}</div><div className="sc-v" style={{color:c}}>{v}</div><div className="sc-s">{s}</div></div>))}
+              {[['My Classes',realCourses.length,'Active','#1D9E75'],['Students',students.length,'Total','#2471A3'],['Assignments',homeAssignments.filter(a=>a.status==='Active').length,'Active','#D4AC0D'],['Avg Attendance',`${homeAvgAttendance}%`,'This term','#7F77DD']].map(([l,v,s,c])=>(<div className="sc" key={l} style={{cursor:'pointer'}}><div className="sc-l">{l}</div><div className="sc-v" style={{color:c}}>{v}</div><div className="sc-s">{s}</div></div>))}
             </div>
             <div className="twoC">
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>My Classes</div>
@@ -689,17 +701,75 @@ const topStudentsWithMarks = students.map(s => {
           <div className={`panel ${activePane==='t-assign'?'active':''}`}>
             {(()=>{
               const [tAssignTab,setTAssignTab]=useState('list');
-              const [tAssignments,setTAssignments]=useState([
-                {id:1,subject:'Mathematics',cls:'FSc Pre-Eng Sec B',topic:'Chapter 5 — Polynomials',instructions:'Complete all exercises. Show all working.',dueDate:'15 Apr 2026',assignedTo:'Class',status:'Active',totalMarks:25},
-                {id:2,subject:'Mathematics',cls:'FSc Pre-Eng Sec A',topic:'Trigonometry Practice',instructions:'Solve questions 1-20.',dueDate:'18 Apr 2026',assignedTo:'Class',status:'Active',totalMarks:20},
-              ]);
+              const getTeacherIdFromToken = () => {
+  try {
+    const token = localStorage.getItem('token');
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.id;
+  } catch {
+    return null;
+  }
+};
+              const [tAssignments,setTAssignments]=useState([]);
+useEffect(()=>{
+  const token = localStorage.getItem('token');
+  fetch('http://localhost:5000/api/assignments', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) {
+        setTAssignments(data.map(a => ({
+          id: a._id,
+          subject: a.subject,
+          cls: a.class,
+          topic: a.title,
+          instructions: a.description,
+          dueDate: a.dueDate ? new Date(a.dueDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) : '',
+          assignedTo: 'Class',
+          status: a.status,
+          totalMarks: a.totalMarks
+        })));
+      }
+    })
+    .catch(() => {});
+}, []);
               const [editingAssign,setEditingAssign]=useState(null);
               const [newAssign,setNewAssign]=useState({subject:'Mathematics',cls:'',topic:'',instructions:'',dueDate:'',assignedTo:'Class',totalMarks:25,file:null});
-              const [submissions,setSubmissions]=useState([
-                {id:1,student:'Laiba Imtiaz',roll:'FSc-B-041',assignment:'Chapter 5 — Polynomials',subject:'Mathematics',submittedOn:'3 Apr',pastedContent:'Here is my solution to Chapter 5... (student work)',file:'Laiba_Ch5.pdf',status:'Pending',marks:'',feedback:''},
-                {id:2,student:'Sara Khan',roll:'FSc-B-042',assignment:'Chapter 5 — Polynomials',subject:'Mathematics',submittedOn:'3 Apr',pastedContent:'Solved all exercises. Answer to Q1: x=3...',file:'Sara_Ch5.pdf',status:'Pending',marks:'',feedback:''},
-                {id:3,student:'Ali Hassan',roll:'FSc-B-043',assignment:'Chapter 5 — Polynomials',subject:'Mathematics',submittedOn:'4 Apr',pastedContent:'',file:'Ali_Ch5.pdf',status:'Checked',marks:'22',feedback:'Great work! Minor error in Q4.'},
-              ]);
+              const [submissions,setSubmissions]=useState([]);
+useEffect(()=>{
+  const token = localStorage.getItem('token');
+  fetch('http://localhost:5000/api/assignments', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) {
+        const allSubmissions = [];
+        data.forEach(a => {
+          (a.submissions || []).forEach(s => {
+            allSubmissions.push({
+              id: s._id,
+              student: s.student?.name || s.student || 'Unknown',
+              roll: s.student?.roll || '',
+              assignment: a.title,
+              subject: a.subject,
+              submittedOn: s.submittedAt ? new Date(s.submittedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '',
+              pastedContent: s.fileUrl || '',
+              file: '',
+              status: s.status || 'Pending',
+              marks: s.marks || '',
+              feedback: s.feedback || '',
+              assignmentId: a._id,
+              submissionId: s._id
+            });
+          });
+        });
+        setSubmissions(allSubmissions);
+      }
+    })
+    .catch(() => {});
+}, []);
               const [gradingId,setGradingId]=useState(null);
               const [tempMarks,setTempMarks]=useState('');
               const [tempFeedback,setTempFeedback]=useState('');
@@ -709,26 +779,78 @@ const topStudentsWithMarks = students.map(s => {
               const tSubjects=['Mathematics','Physics','Chemistry','English','Biology','Computer','Urdu','Islamic Studies','Pak Studies'];
 
               const addOrUpdateAssign=()=>{
-                if(!newAssign.topic.trim()||!newAssign.dueDate){ showToast('Fill topic and due date','⚠'); return; }
-                if(editingAssign){
-                  setTAssignments(prev=>prev.map(a=>a.id===editingAssign.id?{...a,...newAssign}:a));
-                  showToast('Assignment updated!'); setEditingAssign(null);
-                } else {
-                  setTAssignments(prev=>[...prev,{id:Date.now(),...newAssign}]);
-                  showToast('Assignment created and assigned!');
-                }
-                setNewAssign({subject:'Mathematics',cls:'',topic:'',instructions:'',dueDate:'',assignedTo:'Class',totalMarks:25,file:null});
-                setTAssignTab('list');
-              };
-              const deleteAssign=(id)=>{ setTAssignments(prev=>prev.filter(a=>a.id!==id)); showToast('Assignment deleted.','🗑'); };
-              const startEdit=(a)=>{ setNewAssign({...a}); setEditingAssign(a); setTAssignTab('create'); };
+  if(!newAssign.topic.trim()||!newAssign.dueDate){ showToast('Fill topic and due date','⚠️ '); return; }
+  const token = localStorage.getItem('token');
+  if(editingAssign){
+    fetch(`http://localhost:5000/api/assignments/${editingAssign.id}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ status: newAssign.status || 'Active' })
+    }).catch(() => {});
+    setTAssignments(prev=>prev.map(a=>a.id===editingAssign.id?{...a,...newAssign}:a));
+    showToast('Assignment updated!'); setEditingAssign(null);
+  } else {
+    fetch('http://localhost:5000/api/assignments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+  title: newAssign.topic,
+  description: newAssign.instructions,
+  subject: newAssign.subject,
+  class: newAssign.cls,
+  teacher: (user.teacher && user.teacher._id) ? user.teacher._id : (user._id || user.id || '6a40f5d8162dc57952197746'),
+  dueDate: newAssign.dueDate,
+  totalMarks: newAssign.totalMarks
+})
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.assignment) {
+          setTAssignments(prev=>[...prev,{
+            id: data.assignment._id,
+            subject: data.assignment.subject,
+            cls: data.assignment.class,
+            topic: data.assignment.title,
+            instructions: data.assignment.description,
+            dueDate: data.assignment.dueDate,
+            assignedTo: 'Class',
+            status: data.assignment.status,
+            totalMarks: data.assignment.totalMarks
+          }]);
+        }
+      })
+      .catch(() => {});
+    showToast('Assignment created and assigned!');
+  }
+  setNewAssign({subject:'Mathematics',cls:'',topic:'',instructions:'',dueDate:'',assignedTo:'Class',totalMarks:25,file:null});
+  setTAssignTab('list');
+};
+              const deleteAssign=(id)=>{
+  const token = localStorage.getItem('token');
+  fetch(`http://localhost:5000/api/assignments/${id}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  }).catch(()=>{});
+  setTAssignments(prev=>prev.filter(a=>a.id!==id));
+  showToast('Assignment deleted.','🗑️ ');
+};
 
-              const saveGrade=()=>{
-                if(!tempMarks){ showToast('Enter marks','⚠'); return; }
-                setSubmissions(prev=>prev.map(s=>s.id===gradingId?{...s,marks:tempMarks,feedback:tempFeedback,status:'Checked'}:s));
-                setGradingId(null); setTempMarks(''); setTempFeedback('');
-                showToast('✅ Grade and feedback saved successfully!');
-              };
+              const saveGrade=async()=>{
+  if(!tempMarks){ showToast('Enter marks','⚠️'); return; }
+  const target=submissions.find(s=>s.id===gradingId);
+  try{
+    const token=localStorage.getItem('token');
+    await fetch(`http://localhost:5000/api/assignments/${target.assignmentId}/grade`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+      body:JSON.stringify({ submissionId: target.submissionId, marks: tempMarks, feedback: tempFeedback })
+    });
+  }catch(e){}
+  setSubmissions(prev=>prev.map(s=>s.id===gradingId?{...s,marks:tempMarks,feedback:tempFeedback,status:'Checked'}:s));
+  setGradingId(null);
+  setTempMarks(''); setTempFeedback('');
+  showToast('✅ Grade and feedback saved successfully!');
+};
               const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,location:'Teacher Assignment Review Panel > Submissions Tab'}); setViewingSubmission(s); };
 
               return(<>
@@ -871,18 +993,18 @@ const topStudentsWithMarks = students.map(s => {
                             <input className="f-inp" style={{width:65,textAlign:'center'}} placeholder="Marks" type="number"
                               value={gradingId===s.id?tempMarks:s.marks}
                               onChange={e=>{if(gradingId===s.id)setTempMarks(e.target.value);}}
-                              onFocus={()=>{setGradingId(s.id);setTempMarks(s.marks||'');setTempFeedback(s.feedback||'');}}
+                              onFocus={()=>{if(gradingId!==s.id){setGradingId(s.id);setTempMarks(s.marks||'');setTempFeedback(s.feedback||'');}}}
                             />
                             <span style={{color:'rgba(255,255,255,0.3)',fontSize:12}}>/{tAssignments.find(a=>a.topic===s.assignment)?.totalMarks||25}</span>
                           </div>
-                          <select className="d-select" style={{width:80,marginBottom:0,fontSize:11}} onChange={e=>{if(gradingId===s.id)setTempFeedback(e.target.value+' '+tempFeedback);}}>
+                          <select className="d-select" style={{width:80,marginBottom:0,fontSize:11}} onChange={e=>{if(gradingId===s.id)setTempFeedback(e.target.value+' '+tempFeedback);}} onFocus={()=>{if(gradingId!==s.id){setGradingId(s.id);setTempMarks(s.marks||'');setTempFeedback(s.feedback||'');}}}>
                             <option value="">Grade →</option>
                             {['A+','A','B+','B','C','D','F'].map(g=><option key={g} value={g}>{g}</option>)}
                           </select>
                           <input className="f-inp" style={{flex:1,minWidth:140}} placeholder="Feedback for student..."
                             value={gradingId===s.id?tempFeedback:s.feedback}
                             onChange={e=>{if(gradingId===s.id)setTempFeedback(e.target.value);}}
-                            onFocus={()=>{setGradingId(s.id);setTempMarks(s.marks||'');setTempFeedback(s.feedback||'');}}
+                            onFocus={()=>{if(gradingId!==s.id){setGradingId(s.id);setTempMarks(s.marks||'');setTempFeedback(s.feedback||'');}}}
                           />
                           <button className="d-btn d-btn-green" style={{whiteSpace:'nowrap'}} onClick={()=>{
                             if(gradingId!==s.id){setGradingId(s.id);setTempMarks(s.marks||'');setTempFeedback(s.feedback||'');showToast('Click save after entering marks & feedback'); return;}

@@ -58,12 +58,23 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
     if(email.toLowerCase()!==cred.email.toLowerCase()){ setEmailErr('No account found with this email'); return; }
     setEmailErr(''); setEmailStep(false);
   };
-  const doLogin=()=>{
-    if(!password){ setPassErr('Please enter your password'); return; }
-    if(password!==cred.password){ setPassErr('Incorrect password. Try again or use "Forgot password?"'); return; }
+  const doLogin=async()=>{
+  if(!password){ setPassErr('Please enter your password'); return; }
+  try{
+    const res=await fetch('http://localhost:5000/api/auth/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ email:cred.email, password })
+    });
+    const data=await res.json();
+    if(!res.ok){ setPassErr(data.message||'Login failed'); return; }
     setPassErr('');
-    onLogin(role,{ name:cred.name });
-  };
+    localStorage.setItem('token',data.token);
+    onLogin(role,data.user);
+  }catch(err){
+    setPassErr('Server error. Try again.');
+  }
+};
 
   // ── FORGOT PASSWORD ──
   const fpSendCode=()=>{

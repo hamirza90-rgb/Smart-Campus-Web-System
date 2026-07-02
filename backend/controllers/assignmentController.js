@@ -3,7 +3,8 @@ const Assignment = require('../models/Assignment');
 exports.createAssignment = async (req, res) => {
   try {
     const { title, description, subject, class: className, teacher, dueDate, totalMarks } = req.body;
-    const assignment = await Assignment.create({ title, description, subject, class: className, teacher, dueDate, totalMarks });
+    const teacherId = teacher || req.user?.id;
+    const assignment = await Assignment.create({ title, description, subject, class: className, teacher: teacherId, dueDate, totalMarks });
     res.status(201).json({ message: 'Assignment created', assignment });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
@@ -18,10 +19,12 @@ exports.getAssignments = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }
-};
-exports.getAllAssignments = async (req, res) => {
+};exports.getAllAssignments = async (req, res) => {
   try {
-    const assignments = await Assignment.find().populate('teacher', 'name').sort({ createdAt: -1 });
+    const assignments = await Assignment.find()
+      .populate('teacher', 'name')
+      .populate('submissions.student', 'name roll')
+      .sort({ createdAt: -1 });
     res.status(200).json(assignments);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
@@ -64,6 +67,15 @@ exports.gradeAssignment = async (req, res) => {
     submission.status = 'Graded';
     await assignment.save();
     res.status(200).json({ message: 'Assignment graded' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+exports.deleteAssignment = async (req, res) => {
+  try {
+    const assignment = await Assignment.findByIdAndDelete(req.params.id);
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+    res.status(200).json({ message: 'Assignment deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }
