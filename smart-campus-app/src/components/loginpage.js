@@ -33,7 +33,7 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
   const [fpNewPwErr,setFpNewPwErr]=useState('');
   const [fpShowPw,setFpShowPw]=useState(false);
   // Master code for admin forgot password (hardcoded secret)
-  const ADMIN_MASTER_CODE='PGC-2026-GUJRAT';
+  const ADMIN_MASTER_CODE='PGC-2026-Lalamusa';
 
   const cfg={
     student:{badge:'Student Portal',badgeBg:'rgba(26,82,118,0.2)',badgeColor:'#2471A3',greeting:'Welcome, Student',heading:'Sign in as Student',btnBg:'linear-gradient(135deg,#0d2744,#2471A3)'},
@@ -53,29 +53,64 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
   };
 
   // ── NORMAL LOGIN ──
+  const proceedStudentEmail=()=>{
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ setEmailErr('Please enter a valid email address'); return; }
+    setEmailErr(''); setEmailStep(false);
+  };
+
+  const doStudentLogin=async()=>{
+    if(!password){ setPassErr('Please enter your password'); return; }
+    try{
+      const res=await fetch('http://localhost:5000/api/students/login',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email:email.toLowerCase(),password})
+      });
+      const data=await res.json();
+      if(res.ok){
+        setPassErr('');
+        console.log('Student data being passed:', data);
+        onLogin('student',{id:data.id,name:data.name,email:data.email,roll:data.roll,dept:data.dept});
+      } else {
+        setPassErr(data.message||'Login failed. Check email and password.');
+      }
+    }catch(err){
+      setPassErr('Server error. Make sure backend is running.');
+    }
+  };
   const proceedEmail=()=>{
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ setEmailErr('Please enter a valid email address'); return; }
-    if(email.toLowerCase()!==cred.email.toLowerCase()){ setEmailErr('No account found with this email'); return; }
+    if(role==='admin'){
+      if(email.toLowerCase()!==cred.email.toLowerCase()){ setEmailErr('No account found with this email'); return; }
+    }
     setEmailErr(''); setEmailStep(false);
   };
   const doLogin=async()=>{
-  if(!password){ setPassErr('Please enter your password'); return; }
-  try{
-    const res=await fetch('http://localhost:5000/api/auth/login',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ email:cred.email, password })
-    });
-    const data=await res.json();
-    if(!res.ok){ setPassErr(data.message||'Login failed'); return; }
-    setPassErr('');
-    localStorage.setItem('token',data.token);
-    onLogin(role,data.user);
-  }catch(err){
-    setPassErr('Server error. Try again.');
-  }
-};
-
+    if(!password){ setPassErr('Please enter your password'); return; }
+    if(role==='teacher'){
+      try{
+        const res=await fetch('http://localhost:5000/api/teachers/login',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({email:email.toLowerCase(),password})
+        });
+        const data=await res.json();
+        if(res.ok){
+          setPassErr('');
+          if(data.token) localStorage.setItem('token', data.token);
+          onLogin('teacher',{id:data.id,name:data.name,email:data.email,dept:data.dept});
+        } else {
+          setPassErr(data.message||'Login failed. Check email and password.');
+        }
+      }catch(err){
+        setPassErr('Server error. Make sure backend is running.');
+      }
+    } else {
+      if(password!==cred.password){ setPassErr('Incorrect password. Try again or use "Forgot password?"'); return; }
+      setPassErr('');
+      onLogin(role,{ name:cred.name });
+    }
+  };
   // ── FORGOT PASSWORD ──
   const fpSendCode=()=>{
     if(!fpEmail||!fpEmail.includes('@')){ setFpEmailErr('Enter your registered email'); return; }
@@ -112,7 +147,7 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
         <button className="login-back" onClick={onBack}><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14"><path d="M10 7H3M6 4L3 7l3 3"/></svg>Back to home</button>
         <PGCLogo size={52}/>
         <div className="login-college-name">Punjab Group<br/>of Colleges</div>
-        <div className="login-college-sub">Smart Campus Web System · Gujrat</div>
+        <div className="login-college-sub">Smart Campus Web System · Lalamusa</div>
         <div className="login-role-badge" style={{background:cfg.badgeBg}}>
           <div className="login-role-dot" style={{background:cfg.badgeColor}}></div>
           <span style={{color:cfg.badgeColor,fontSize:13,fontWeight:500}}>{cfg.badge}</span>
@@ -127,12 +162,27 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
             <>
               <div className="login-greeting">{cfg.greeting}</div>
               <div className="login-title">{cfg.heading}</div>
-              <p style={{color:'rgba(255,255,255,0.3)',fontSize:12,marginBottom:20,lineHeight:1.7}}>Sign in with your Google account to access the student portal.</p>
-              <button className="google-btn" onClick={()=>setShowGoogle(true)}>
-                <svg viewBox="0 0 20 20" width="18" height="18"><path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.77h5.39a4.6 4.6 0 0 1-2 3.02v2.5h3.22c1.89-1.74 2.99-4.3 2.99-7.29z" fill="#4285F4"/><path d="M10 20c2.7 0 4.97-.89 6.62-2.42l-3.22-2.5c-.9.6-2.04.96-3.4.96-2.61 0-4.82-1.76-5.61-4.13H1.07v2.58A10 10 0 0 0 10 20z" fill="#34A853"/><path d="M4.39 11.91A6.01 6.01 0 0 1 4.08 10c0-.66.11-1.3.31-1.91V5.51H1.07A10 10 0 0 0 0 10c0 1.62.39 3.14 1.07 4.49l3.32-2.58z" fill="#FBBC05"/><path d="M10 3.96c1.47 0 2.79.51 3.83 1.49l2.85-2.85C14.96.99 12.69 0 10 0A10 10 0 0 0 1.07 5.51l3.32 2.58C5.18 5.72 7.39 3.96 10 3.96z" fill="#EA4335"/></svg>
-                Continue with Google
-              </button>
-              <div className="google-note">Use your registered @gmail.com account to sign in.</div>
+              {emailStep?(
+                <>
+                  <label className="f-label">Email Address</label>
+                  <input className="f-input" type="email" placeholder="your@email.com" value={email} onChange={e=>{setEmail(e.target.value);setEmailErr('');}} onKeyDown={e=>e.key==='Enter'&&proceedStudentEmail()}/>
+                  {emailErr&&<div style={{fontSize:11,color:'#f87171',marginTop:-10,marginBottom:10}}>⚠ {emailErr}</div>}
+                  <button className="submit-btn" style={{background:cfg.btnBg}} onClick={proceedStudentEmail}>Continue <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" width="14"><path d="M3 8h10M9 4l4 4-4 4"/></svg></button>
+                </>
+              ):(
+                <>
+                  <div className="email-chip"><span className="email-chip-addr">{email}</span><button className="email-chip-change" onClick={()=>{setEmailStep(true);setPassword('');setPassErr('');}}>Change</button></div>
+                  <label className="f-label">Password</label>
+                  <div style={{position:'relative'}}>
+                    <input className="f-input" type={showPw?'text':'password'} autoComplete="off" placeholder="Enter your password" value={password} style={{paddingRight:50}} onChange={e=>{setPassword(e.target.value);setPassErr('');}} onKeyDown={e=>e.key==='Enter'&&doStudentLogin()}/>
+                    <button onClick={()=>setShowPw(!showPw)} style={{position:'absolute',right:14,top:12,background:'none',border:'none',color:'rgba(255,255,255,0.35)',cursor:'pointer',fontSize:12}}>
+                      {showPw?'Hide':'Show'}
+                    </button>
+                  </div>
+                  {passErr&&<div style={{fontSize:11,color:'#f87171',marginBottom:10,padding:'6px 10px',background:'rgba(192,57,43,0.08)',borderRadius:6,border:'1px solid rgba(192,57,43,0.2)'}}>⚠ {passErr}</div>}
+                  <button className="submit-btn" style={{background:cfg.btnBg}} onClick={doStudentLogin}>Sign In <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" width="14"><path d="M3 8h10M9 4l4 4-4 4"/></svg></button>
+                </>
+              )}
             </>
           )}
 
@@ -160,7 +210,7 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
                       {role==='admin'?<>Enter the <strong style={{color:'rgba(255,255,255,0.6)'}}>Secret Master Code</strong> provided by college administration.</>:<>A 6-digit code was sent to the phone linked to <strong style={{color:'rgba(255,255,255,0.6)'}}>{fpEmail}</strong>.</>}
                     </p>
                     <label className="f-label">{role==='admin'?'Master Code':'Verification Code'}</label>
-                    <input className="f-input" type="text" maxLength={role==='admin'?20:6} placeholder={role==='admin'?'e.g. PGC-2026-GUJRAT':'_ _ _ _ _ _'} value={fpCode} onChange={e=>{setFpCode(e.target.value);setFpCodeErr('');}} style={role==='teacher'?{letterSpacing:8,fontSize:18,textAlign:'center'}:{}}/>
+                    <input className="f-input" type="text" maxLength={role==='admin'?20:6} placeholder={role==='admin'?'e.g. PGC-2026-Lalamusa':'_ _ _ _ _ _'} value={fpCode} onChange={e=>{setFpCode(e.target.value);setFpCodeErr('');}} style={role==='teacher'?{letterSpacing:8,fontSize:18,textAlign:'center'}:{}}/>
                     {fpCodeErr&&<div style={{fontSize:11,color:'#f87171',marginBottom:10}}>⚠ {fpCodeErr}</div>}
                     {role==='admin'&&<div style={{fontSize:10,color:'rgba(255,255,255,0.25)',marginBottom:12,padding:'6px 10px',background:'rgba(192,57,43,0.06)',borderRadius:6,border:'1px solid rgba(192,57,43,0.1)'}}>🔒 The Master Code is set by the college. Contact PGC Administration if you don't have it.</div>}
                     {role==='teacher'&&<button style={{background:'none',border:'none',color:'rgba(255,255,255,0.35)',cursor:'pointer',fontSize:11,marginBottom:12,padding:0}} onClick={fpSendCode}>Resend code</button>}
@@ -185,7 +235,7 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
                     </div>
                   </>}
                 </>
-              ) : isFirstTime ? (
+              ) : (isFirstTime && role==='admin') ? (
                 /* ── FIRST TIME SETUP ── */
                 <>
                   <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
@@ -230,7 +280,7 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
                   {emailStep?(
                     <>
                       <label className="f-label">Email Address</label>
-                      <input className="f-input" type="email" placeholder={cred.email||'your@email.com'} value={email} onChange={e=>{setEmail(e.target.value);setEmailErr('');}} onKeyDown={e=>e.key==='Enter'&&proceedEmail()}/>
+                      <input className="f-input" type="email" autoComplete="off" placeholder={cred.email||'your@email.com'} value={email} onChange={e=>{setEmail(e.target.value);setEmailErr('');}} onKeyDown={e=>e.key==='Enter'&&proceedEmail()}/>
                       {emailErr&&<div style={{fontSize:11,color:'#f87171',marginTop:-10,marginBottom:10}}>⚠ {emailErr}</div>}
                       <button className="submit-btn" style={{background:cfg.btnBg}} onClick={proceedEmail}>Continue <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" width="14"><path d="M3 8h10M9 4l4 4-4 4"/></svg></button>
                     </>
@@ -239,7 +289,7 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
                       <div className="email-chip"><span className="email-chip-addr">{email}</span><button className="email-chip-change" onClick={()=>{setEmailStep(true);setPassword('');setPassErr('');}}>Change</button></div>
                       <label className="f-label">Password</label>
                       <div style={{position:'relative'}}>
-                        <input className="f-input" type={showPw?'text':'password'} placeholder="Enter your password" value={password} style={{paddingRight:50}} onChange={e=>{setPassword(e.target.value);setPassErr('');}} onKeyDown={e=>e.key==='Enter'&&doLogin()}/>
+                        <input className="f-input" type={showPw?'text':'password'} autoComplete="off" placeholder="Enter your password" value={password} style={{paddingRight:50}} onChange={e=>{setPassword(e.target.value);setPassErr('');}} onKeyDown={e=>e.key==='Enter'&&doLogin()}/>
                         <button onClick={()=>setShowPw(!showPw)} style={{position:'absolute',right:14,top:12,background:'none',border:'none',color:'rgba(255,255,255,0.35)',cursor:'pointer',fontSize:12,fontFamily:"'DM Sans',sans-serif"}}>{showPw?'Hide':'Show'}</button>
                       </div>
                       {passErr&&<div style={{fontSize:11,color:'#f87171',marginBottom:10,padding:'6px 10px',background:'rgba(192,57,43,0.08)',borderRadius:6,border:'1px solid rgba(192,57,43,0.2)'}}>⚠ {passErr}</div>}
@@ -253,7 +303,18 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
           )}
         </div>
       </div>
-      {showGoogle&&<GoogleOAuthModal onClose={()=>setShowGoogle(false)} onSuccess={u=>{ setShowGoogle(false); onLogin('student',u); }}/>}
+      {showGoogle&&<GoogleOAuthModal onClose={()=>setShowGoogle(false)} onSuccess={async u=>{
+        setShowGoogle(false);
+        try{
+          const res=await fetch('http://localhost:5000/api/students');
+          const students=await res.json();
+          const matched=Array.isArray(students)?students.find(s=>s.email?.toLowerCase()===u.email?.toLowerCase()):null;
+          const finalUser=matched?{...u,id:matched._id,roll:matched.roll,dept:matched.dept}:u;
+          onLogin('student',finalUser);
+        }catch(err){
+          onLogin('student',u);
+        }
+      }}/>}
     </div>
   );
 }
