@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { initMockData } from '../mockData';
 
 // ══ PGC LOGO ══
@@ -24,6 +24,45 @@ function Toast({msg,icon='✓'}){
 }
 
 function HomePage({onSignIn, setPage}){
+  const [liveStats, setLiveStats] = useState({ students: null, faculty: null, classes: null, passRate: null });
+
+useEffect(() => {
+  fetch('http://localhost:5000/api/students')
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) {
+        setLiveStats(prev => ({ ...prev, students: data.length }));
+      }
+    })
+    .catch(() => {});
+
+  fetch('http://localhost:5000/api/teachers')
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) {
+        setLiveStats(prev => ({ ...prev, faculty: data.length }));
+      }
+    })
+    .catch(() => {});
+
+  fetch('http://localhost:5000/api/courses')
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) {
+        const uniqueClasses = new Set(data.map(c => c.class));
+        setLiveStats(prev => ({ ...prev, classes: uniqueClasses.size }));
+      }
+    })
+    .catch(() => {});
+    fetch('http://localhost:5000/api/results/stats/passrate')
+    .then(res => res.json())
+    .then(data => {
+      if (data.passRate !== null && data.passRate !== undefined) {
+        setLiveStats(prev => ({ ...prev, passRate: data.passRate }));
+      }
+    })
+    .catch(() => {});
+}, []);
   const [contactForm,setContactForm]=useState({name:'',email:'',subject:'',msg:''});
   const [formErrors,setFormErrors]=useState({});
   const [toast,setToast]=useState(null);
@@ -84,7 +123,12 @@ function HomePage({onSignIn, setPage}){
         <p className="hero-sub">Punjab Group of Colleges</p>
         <p className="hero-desc">A unified digital platform for students, teachers and administrators — attendance, assignments, results and more, all in one place.</p>
         <div className="hero-stats">
-          {[['3,200+','Students'],['180','Faculty'],['60','Classes'],['98%','Pass Rate']].map(([n,l])=>(
+          {[
+  [liveStats.students!==null?`${liveStats.students}+`:'...','Students'],
+  [liveStats.faculty!==null?`${liveStats.faculty}`:'...','Faculty'],
+  [liveStats.classes!==null?`${liveStats.classes}`:'...','Classes'],
+  [liveStats.passRate!==null?`${liveStats.passRate}%`:'...','Pass Rate']
+].map(([n,l])=>(
             <div className="hstat" key={l}><div className="hstat-n">{n}</div><div className="hstat-l">{l}</div></div>
           ))}
         </div>
@@ -116,11 +160,18 @@ function HomePage({onSignIn, setPage}){
           <div className="about-text">
             <div className="section-title" style={{textAlign:'left'}}>About PGC</div>
             <div className="section-sub" style={{textAlign:'left',marginBottom:16}}>Punjab Group of Colleges — Est. 1992</div>
-            <p className="about-p">Punjab Group of Colleges (PGC) is one of Pakistan's largest and most reputable educational institutions, providing quality education from intermediate to postgraduate level across Gujrat, Punjab.</p>
+            <p className="about-p">Punjab Group of Colleges (PGC) is one of Pakistan's largest and most reputable educational institutions, providing quality education from intermediate to postgraduate level across Lalamusa, Punjab.</p>
             <p className="about-p">The Smart Campus Web System is our digital transformation initiative — bringing all academic processes online for students, teachers, and administrators in one seamless platform.</p>
           </div>
           <div className="about-stats">
-            {[['3,200+','Students Enrolled'],['180','Faculty Members'],['60','Classes Running'],['98%','Annual Pass Rate'],['1992','Year Founded'],['8','Modules Active']].map(([n,l])=>(
+            {[
+  [liveStats.students!==null?`${liveStats.students}+`:'...','Students Enrolled'],
+  [liveStats.faculty!==null?`${liveStats.faculty}`:'...','Faculty Members'],
+  [liveStats.classes!==null?`${liveStats.classes}`:'...','Classes Running'],
+  [liveStats.passRate!==null?`${liveStats.passRate}%`:'...','Annual Pass Rate'],
+  ['1992','Year Founded'],
+  ['8','Modules Active']
+].map(([n,l])=>(
               <div className="about-stat" key={l}><div className="about-stat-n">{n}</div><div className="about-stat-l">{l}</div></div>
             ))}
           </div>
@@ -133,7 +184,7 @@ function HomePage({onSignIn, setPage}){
         <div className="section-sub">Get in touch with PGC Administration</div>
         <div className="contact-grid">
           {[
-            {icon:'📍',label:'Address',val:'Punjab Group of Colleges, Main Campus, Gujrat, Punjab, Pakistan'},
+            {icon:'📍',label:'Address',val:'Punjab Group of Colleges, Main Campus, Lalamusa, Punjab, Pakistan'},
             {icon:'📞',label:'Phone',val:'+92-53-3720000'},
             {icon:'✉️',label:'Email',val:'info@pgc.edu.pk'},
             {icon:'🕐',label:'Office Hours',val:'Mon–Fri: 8:00 AM – 4:00 PM'},
@@ -178,7 +229,7 @@ function HomePage({onSignIn, setPage}){
       <footer className="home-footer">
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <PGCLogo size={22}/>
-          <span className="footer-copy">© 2026 Punjab Group of Colleges, Gujrat. All rights reserved.</span>
+          <span className="footer-copy">© 2026 Punjab Group of Colleges, Lalamusa. All rights reserved.</span>
         </div>
         <div className="footer-links">
           <span className="footer-link" onClick={()=>scrollTo('about')}>About</span>

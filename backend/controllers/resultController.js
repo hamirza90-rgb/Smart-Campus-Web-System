@@ -38,3 +38,16 @@ exports.getClassResults = async (req, res) => {
     res.status(500).json({ message: 'Server error', error });
   }
 };
+exports.getPassRate = async (req, res) => {
+  try {
+    const results = await Result.find({}, 'percentage');
+    if (results.length === 0) {
+      return res.status(200).json({ passRate: null, totalResults: 0 });
+    }
+    const passed = results.filter(r => r.percentage >= 40).length;
+    const passRate = Math.round((passed / results.length) * 100);
+    res.status(200).json({ passRate, totalResults: results.length, passed });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};

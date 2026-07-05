@@ -1143,7 +1143,7 @@ useEffect(()=>{
 <div style="max-width:800px;margin:30px auto;background:#fff;box-shadow:0 2px 20px rgba(0,0,0,0.1)">
   <div style="background:linear-gradient(135deg,#0f2444,#1a3a6e);padding:28px 36px;color:#fff;text-align:center">
     <div style="font-size:26pt;font-weight:bold;font-family:'Times New Roman',serif;margin-bottom:6px">Punjab Group of Colleges</div>
-    <div style="font-size:14pt;font-family:'Times New Roman',serif;opacity:0.8">Gujrat Campus, Punjab, Pakistan</div>
+    <div style="font-size:14pt;font-family:'Times New Roman',serif;opacity:0.8">Lalamusa Campus, Punjab, Pakistan</div>
     <div style="font-size:12pt;opacity:0.6;margin-top:4px">www.pgc.edu.pk | info@pgc.edu.pk | +92-53-3720000</div>
     <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,0.3);padding-top:14px">
       <div style="font-size:18pt;font-weight:bold;font-family:'Times New Roman',serif">RESULT SHEET</div>
@@ -1177,7 +1177,7 @@ useEffect(()=>{
     </div>
   </div>
   <div style="background:#f9fafb;border-top:2px solid #e5e7eb;padding:16px 36px;display:flex;justify-content:space-between;align-items:center">
-    <div style="font-size:12pt;color:#6b7280;font-family:'Times New Roman',serif">Punjab Group of Colleges, Gujrat — Official Result Sheet</div>
+    <div style="font-size:12pt;color:#6b7280;font-family:'Times New Roman',serif">Punjab Group of Colleges, Lalamusa — Official Result Sheet</div>
     <button onclick="window.print()" style="background:#0f2444;color:#fff;border:none;padding:10px 22px;border-radius:6px;font-size:13pt;font-family:'Times New Roman',serif;font-weight:bold;cursor:pointer">🖨 Print / Save PDF</button>
   </div>
 </div>

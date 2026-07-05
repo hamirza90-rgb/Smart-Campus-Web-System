@@ -208,7 +208,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
     </div>
     <div>
       <div style="font-family:'Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:0.01em">Punjab Group of Colleges</div>
-      <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.7;margin-top:3px">Gujrat Campus · Smart Campus Web System</div>
+      <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.7;margin-top:3px">Lalamusa Campus · Smart Campus Web System</div>
     </div>
     <div style="margin-left:auto;text-align:right">
       <div style="font-size:18px;font-weight:700;font-family:'Noto Serif',serif">RESULT CARD</div>
@@ -240,7 +240,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
   </div>
   <!-- Footer -->
   <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 32px;display:flex;justify-content:space-between;align-items:center">
-    <div style="font-size:11px;color:#9ca3af">This is a computer-generated result card. Punjab Group of Colleges, Gujrat.</div>
+    <div style="font-size:11px;color:#9ca3af">This is a computer-generated result card. Punjab Group of Colleges, Lalamusa.</div>
     <div class="no-print"><button onclick="window.print()" style="background:#1e3a5f;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">🖨 Print</button></div>
   </div>
 </div>
@@ -283,7 +283,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
       </div>
       <div>
         <div style="font-family:'Noto Serif',serif;font-size:24px;font-weight:700">Punjab Group of Colleges</div>
-        <div style="font-size:11px;opacity:0.65;letter-spacing:0.1em;text-transform:uppercase;margin-top:4px">Gujrat Campus · Established 1992</div>
+        <div style="font-size:11px;opacity:0.65;letter-spacing:0.1em;text-transform:uppercase;margin-top:4px">Lalamusa Campus · Established 1992</div>
       </div>
       <div style="margin-left:auto;text-align:right">
         <div style="font-family:'Noto Serif',serif;font-size:20px;font-weight:700;letter-spacing:0.02em">OFFICIAL TRANSCRIPT</div>
@@ -291,7 +291,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
       </div>
     </div>
     <div style="padding:12px 0;font-size:11.5px;opacity:0.55;text-align:center;letter-spacing:0.04em">
-      This official transcript is issued by Punjab Group of Colleges, Gujrat and certifies the academic record of the named student.
+      This official transcript is issued by Punjab Group of Colleges, Lalamusa and certifies the academic record of the named student.
     </div>
   </div>
   <!-- Student Details Card -->
@@ -341,7 +341,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
     }
 
     // Course material / other files
-    const text=content||`PGC Study Material\n\nFile: ${name}\n\nPunjab Group of Colleges, Gujrat\n${todayStr}`;
+    const text=content||`PGC Study Material\n\nFile: ${name}\n\nPunjab Group of Colleges, Lalamusa\n${todayStr}`;
     const blob=new Blob([text],{type:'text/plain'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
@@ -533,7 +533,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
 
                     {/* Info */}
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:9,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:6}}>Punjab Group of Colleges · Gujrat</div>
+                      <div style={{fontSize:9,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:6}}>Punjab Group of Colleges · Lalamusa</div>
                       <div style={{fontSize:18,fontWeight:800,color:'#fff',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{studentName}</div>
                       <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:2}}>Roll No: <span style={{color:'#90cdf4',fontWeight:700}}>{studentId}</span></div>
                       <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:2}}>Section: <span style={{color:'var(--white2)',fontWeight:500}}>{d.section}</span></div>
@@ -598,7 +598,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                 {showFullQR&&(
                   <div style={{position:'fixed',inset:0,background:'rgba(5,10,24,0.97)',zIndex:9999,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',animation:'fadeIn 0.15s ease'}} onClick={()=>setShowFullQR(false)}>
                     <div style={{textAlign:'center',padding:32}} onClick={e=>e.stopPropagation()}>
-                      <div style={{fontSize:12,color:'rgba(255,255,255,0.3)',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:16}}>Punjab Group of Colleges · Gujrat</div>
+                      <div style={{fontSize:12,color:'rgba(255,255,255,0.3)',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:16}}>Punjab Group of Colleges · Lalamusa</div>
                       <div style={{background:'#fff',padding:20,borderRadius:20,display:'inline-block',boxShadow:'0 8px 40px rgba(0,0,0,0.6)',marginBottom:16}}>
                         <StudentQRCode size={220}/>
                         <div style={{textAlign:'center',fontSize:11,color:'#1e3a5f',marginTop:10,fontWeight:700,letterSpacing:'0.05em'}}>{studentId}</div>
@@ -895,7 +895,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
         <svg viewBox="0 0 40 40" width="40" height="40"><circle cx="20" cy="20" r="18" fill="#0f2444"/><text x="20" y="26" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff" font-family="serif">PGC</text></svg>
       </div>
       <div>
-        <div style="font-family:'Noto Serif',serif;font-size:18px;font-weight:700">Punjab Group of Colleges — Gujrat</div>
+        <div style="font-family:'Noto Serif',serif;font-size:18px;font-weight:700">Punjab Group of Colleges — Lalamusa</div>
         <div style="font-size:10px;opacity:0.6;letter-spacing:0.1em;text-transform:uppercase;margin-top:3px">Academic Study Material</div>
       </div>
       <div class="no-print" style="margin-left:auto">
@@ -936,7 +936,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
 
   <!-- Footer -->
   <div style="background:#f8fafc;border-top:2px solid #e2e8f0;padding:12px 32px;display:flex;justify-content:space-between;align-items:center">
-    <div style="font-size:10.5px;color:#9ca3af">© Punjab Group of Colleges, Gujrat · ${note.name} · ${today}</div>
+    <div style="font-size:10.5px;color:#9ca3af">© Punjab Group of Colleges, Lalamusa · ${note.name} · ${today}</div>
     <div style="font-size:10px;color:#9ca3af">For academic use only</div>
   </div>
 </div>
