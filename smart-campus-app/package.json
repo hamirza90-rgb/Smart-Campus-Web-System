@@ -9,6 +9,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.15.2",
+    "cross-env": "^7.0.3",
     "html5-qrcode": "^2.3.8",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
@@ -24,15 +25,15 @@
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
-  "extends": [
-    "react-app",
-    "react-app/jest"
-  ],
-  "rules": {
-    "react-hooks/rules-of-hooks": "off",
-    "no-undef": "warn"
-  }
-},
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ],
+    "rules": {
+      "react-hooks/rules-of-hooks": "off",
+      "no-undef": "warn"
+    }
+  },
   "browserslist": {
     "production": [
       ">0.2%",

@@ -148,8 +148,46 @@ useEffect(()=>{
     showToast('Attendance saved & downloaded!');
   };
   const filteredStudents=students.filter(s=>s.name.toLowerCase().includes(searchTerm.toLowerCase())||s.roll.toLowerCase().includes(searchTerm.toLowerCase()));
-  const addStudent=()=>{ if(!newStudent.name||!newStudent.roll){ showToast('Please fill Name and Roll No'); return; } setStudents(prev=>[...prev,{...newStudent}]); setNewStudent({name:'',roll:'',attend:100,marks:0,grade:'A'}); setShowAddStudent(false); showToast('Student added successfully!'); };
-  const deleteStudent=(roll)=>{ setStudents(prev=>prev.filter(s=>s.roll!==roll)); showToast('Student removed.'); };
+  const addStudent=async()=>{
+  if(!newStudent.name||!newStudent.roll){ showToast('Please fill Name and Roll No'); return; }
+  const token = localStorage.getItem('token');
+  try{
+    const res = await fetch('http://localhost:5000/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ name: newStudent.name, roll: newStudent.roll, dept: attClass })
+    });
+    const data = await res.json();
+    if(res.ok && data.student){
+      setStudents(prev=>[...prev,{
+        _id: data.student._id,
+        name: data.student.name,
+        roll: data.student.roll,
+        attend: data.student.attend||100,
+        marks: data.student.marks||0,
+        grade: data.student.grade||'N/A'
+      }]);
+      showToast('Student added successfully!');
+    } else {
+      showToast('⚠️ '+(data.message||'Backend error'));
+    }
+  }catch(e){
+    showToast('⚠️ Backend save nahi hua');
+  }
+  setNewStudent({name:'',roll:'',attend:100,marks:0,grade:'A'});
+  setShowAddStudent(false);
+};
+const deleteStudent=async(id)=>{
+  setStudents(prev=>prev.filter(s=>s._id!==id));
+  try{
+    const token = localStorage.getItem('token');
+    await fetch(`http://localhost:5000/api/students/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+  }catch(e){}
+  showToast('Student removed.');
+};
 
   // ── REAL QR SCANNER useEffect (v26 logic) ────────────────────────────────
   useEffect(()=>{
@@ -204,8 +242,8 @@ useEffect(()=>{
   // ── END QR useEffect ──────────────────────────────────────────────────────
 
   const navItems=[
-    {id:'t-home',label:'Dashboard'},{id:'t-attend',label:'Attendance'},{id:'t-courses',label:'Course Module'},{id:'t-assign',label:'Assignments'},{id:'t-result',label:'Results'},{id:'t-tt',label:'Timetable'},{id:'t-notif',label:'Notifications'},{id:'t-perf',label:'Analytics'},
-  ];
+  {id:'t-home',label:'Dashboard'},{id:'t-attend',label:'Attendance'},{id:'t-courses',label:'Course Module'},{id:'t-students',label:'Student Module'},{id:'t-assign',label:'Assignments'},{id:'t-result',label:'Results'},{id:'t-tt',label:'Timetable'},{id:'t-notif',label:'Notifications'},{id:'t-perf',label:'Analytics'},
+];
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
   const adminAnnsForTeacher=(adminAnns||[]).filter(a=>a.audience==='All Students & Teachers'||a.audience==='Teachers Only');
   const teacherUnreadCount=adminAnnsForTeacher.filter(a=>a.id).length;
@@ -245,8 +283,11 @@ useEffect(()=>{
                 {realCourses.length>0 ? realCourses.map(c=>(<div className="ri" key={c._id}><div><div className="rm">{c.class}</div><div className="rs">{c.name} · Teacher: {c.teacher}</div></div><span className={`badge ${c.status==='Active'?'bg':'bb'}`}>{c.status}</span></div>)) : <div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'12px 0'}}>No courses yet.</div>}
               </div>
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>Pending Assignments</div>
-                {initMockData.student.assignments.filter(a=>a.status==='Pending').map(a=>(<div className="ri" key={a.id}><div><div className="rm">{a.subject} – {a.title}</div><div className="rs">Due: {a.due}</div></div><button className="badge br" style={{border:'none',cursor:'pointer',background:'rgba(192,57,43,0.2)',color:'#f87171'}} onClick={()=>setActivePane('t-assign')}>Review →</button></div>))}
-              </div>
+  {homeAssignments.filter(a=>a.status==='Active').length===0&&(
+    <div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'12px 0'}}>No pending assignments.</div>
+  )}
+  {homeAssignments.filter(a=>a.status==='Active').map(a=>(<div className="ri" key={a._id}><div><div className="rm">{a.subject} – {a.title}</div><div className="rs">Due: {a.dueDate?new Date(a.dueDate).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):'—'}</div></div><button className="badge br" style={{border:'none',cursor:'pointer',background:'rgba(192,57,43,0.2)',color:'#f87171'}} onClick={()=>setActivePane('t-assign')}>Review →</button></div>))}
+</div>
             </div>
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Top Students</div>
               {topStudentsWithMarks.slice(0,4).map(s=>(<div className="user-row" key={s.name}><div className="user-av" style={{background:'rgba(36,113,163,0.3)'}}>{s.name[0]}</div><div><div className="user-name">{s.name}</div><div className="user-detail">{s.roll}</div></div><div style={{marginLeft:'auto',textAlign:'right'}}><div className="user-name">{s.marks}% · <span className={`badge ${getGradeColor(s.grade)}`} style={{fontSize:9}}>{s.grade}</span></div><div className="perf-mini"><div className="perf-bar"><div className="perf-fill" style={{width:`${s.marks}%`,background:'#2471A3'}}/></div><span className="user-detail">Att: {s.attend}%</span></div></div></div>))}
@@ -1251,7 +1292,7 @@ useEffect(()=>{
                       <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
                         <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80'}}>{s.attend}%</span></div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa'}}>{s.marks}</span></div></div>
                         <span className={`badge ${getGradeColor(s.grade)}`}>{s.grade}</span>
-                        <button className="delete-btn" onClick={e=>{e.stopPropagation();deleteStudent(s.roll);}}>Remove</button>
+                        <button className="delete-btn" onClick={e=>{e.stopPropagation();deleteStudent(s._id);}}>Remove</button>
                       </div>
                     </div>))}
                   </div>
@@ -1492,39 +1533,87 @@ const updateCourse=async()=>{
   setEditingCourse(null);setNewCourse({name:'',code:'',class:'',chapters:'',desc:'',status:'Active'});
   setCourseTab('list');
 };
-              const [uploadedFiles,setUploadedFiles]=useState({
-                1:[{id:1,name:'Chapter_1_Real_Numbers_Notes.pdf',uploadedOn:'01 Apr 2026',size:'1.2 MB',uploadedFile:null}],
-                2:[{id:1,name:'Polynomials_Practice_Questions.pdf',uploadedOn:'28 Mar 2026',size:'0.8 MB',uploadedFile:null}],
-              });
-              const [newUpload,setNewUpload]=useState({name:'',file:null,fileName:''});
-              const handleFileUpload=(e)=>{
-                const f=e.target.files[0];
-                if(!f)return;
-                if(f.size>20*1024*1024){showToast('File too large. Max 20MB.','⚠');return;}
-                setNewUpload({name:f.name.replace(/\.[^.]+$/,''),file:f,fileName:f.name});
-                showToast(`📎 ${f.name} selected — ready to upload`);
-              };
-              const uploadFile=()=>{
-                if(!newUpload.fileName){showToast('Select a PDF file first','⚠');return;}
-                if(!selCourse){showToast('Select a course first','⚠');return;}
-                const entry={id:Date.now(),name:newUpload.name||newUpload.fileName,uploadedOn:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),size:`${(newUpload.file?.size/1024/1024||0.5).toFixed(1)} MB`,uploadedFile:newUpload.file};
-                setUploadedFiles(p=>({...p,[selCourse.id]:[...(p[selCourse.id]||[]),entry]}));
-                setNewUpload({name:'',file:null,fileName:''});
-                showToast(`✅ ${entry.name} uploaded successfully — students can now download it!`);
-              };
-              const deleteUpload=(fileId)=>{
-                setUploadedFiles(p=>({...p,[selCourse.id]:(p[selCourse.id]||[]).filter(f=>f.id!==fileId)}));
-                showToast('File removed.','🗑');
-              };
+              const [uploadedFiles,setUploadedFiles]=useState({});
+useEffect(()=>{
+  if(!selCourse) return;
+  const token = localStorage.getItem('token');
+  fetch(`http://localhost:5000/api/materials/course/${selCourse.id}`,{
+    headers:{'Authorization':`Bearer ${token}`}
+  })
+    .then(res=>res.json())
+    .then(data=>{
+      if(Array.isArray(data)){
+        setUploadedFiles(p=>({...p,[selCourse.id]:data.map(m=>({
+          id:m._id,
+          name:m.name,
+          uploadedOn:new Date(m.uploadedOn).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
+          size:formatFileSize(m.fileSize),
+          filePath:m.filePath
+        }))}));
+      }
+    })
+    .catch(()=>{});
+},[selCourse]);
+const [newUpload,setNewUpload]=useState({name:'',file:null,fileName:''});
+const formatFileSize=(bytes)=>{
+  if(!bytes || bytes===0) return '—';
+  if(bytes<1024*1024) return `${(bytes/1024).toFixed(0)} KB`;
+  return `${(bytes/1024/1024).toFixed(1)} MB`;
+};
+const handleFileUpload=(e)=>{
+  const f=e.target.files[0];
+  if(!f)return;
+  if(f.size>50*1024*1024){showToast('File too large. Max 50MB.','⚠');return;}
+  setNewUpload({name:f.name.replace(/\.[^.]+$/,''),file:f,fileName:f.name});
+  showToast(`📎 ${f.name} selected — ready to upload`);
+};
+const uploadFile=async()=>{
+  if(!newUpload.fileName){showToast('Select a PDF file first','⚠');return;}
+  if(!selCourse){showToast('Select a course first','⚠');return;}
+  const token = localStorage.getItem('token');
+  try{
+    const formData = new FormData();
+    formData.append('file', newUpload.file);
+    formData.append('name', newUpload.name || newUpload.fileName);
+    formData.append('course', selCourse.id);
+    const res = await fetch('http://localhost:5000/api/materials', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await res.json();
+    const entry = {
+      id: data._id || Date.now(),
+      name: data.name || newUpload.name || newUpload.fileName,
+      uploadedOn: new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
+      size: formatFileSize(data.fileSize || newUpload.file?.size),
+      filePath: data.filePath
+    };
+    setUploadedFiles(p=>({...p,[selCourse.id]:[...(p[selCourse.id]||[]),entry]}));
+    showToast(`✅ ${entry.name} uploaded successfully — students can now download it!`);
+  }catch(e){
+    showToast('⚠️ Backend save nahi hua');
+  }
+  setNewUpload({name:'',file:null,fileName:''});
+};
+const deleteUpload=async(fileId)=>{
+  setUploadedFiles(p=>({...p,[selCourse.id]:(p[selCourse.id]||[]).filter(f=>f.id!==fileId)}));
+  try{
+    const token = localStorage.getItem('token');
+    await fetch(`http://localhost:5000/api/materials/${fileId}`,{
+      method:'DELETE',
+      headers:{'Authorization':`Bearer ${token}`}
+    });
+  }catch(e){}
+  showToast('File removed.','🗑');
+};
               const downloadAsTeacher=(entry)=>{
-                // If real file was uploaded, use it directly
-                if(entry.uploadedFile){
-                  const url=URL.createObjectURL(entry.uploadedFile);
-                  const a=document.createElement('a');a.href=url;a.download=entry.name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-                } else {
-                  showToast(`Preview: ${entry.name} (original PDF would download here)`,'📄');
-                }
-              };
+  if(entry.filePath){
+    window.open(`http://localhost:5000/uploads/${entry.filePath}`, '_blank');
+  } else {
+    showToast('File not found on server','⚠');
+  }
+};
               const addChapter=async()=>{
   if(!newChapter.title.trim()){showToast('Enter chapter title','⚠');return;}
   const token = localStorage.getItem('token');

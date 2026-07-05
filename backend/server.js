@@ -27,6 +27,8 @@ app.use('/api/results', require('./routes/resultRoutes'));
 app.use('/api/classresults', require('./routes/classResultRoutes'));
 app.use('/api/timetable', require('./routes/timetableRoutes'));
 app.use('/api/announcements', require('./routes/announcementRoutes'));
+app.use('/api/materials', require('./routes/materialRoutes'));
+app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
 
 // Test Route
 app.get('/', (req, res) => {

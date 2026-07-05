@@ -55,6 +55,9 @@ res.status(200).json({ message: 'Student updated', student: updatedStudent });
 // Delete student
 exports.deleteStudent = async (req, res) => {
   try {
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
     const student = await Student.findByIdAndDelete(req.params.id);
     if (!student) return res.status(404).json({ message: 'Student not found' });
     res.status(200).json({ message: 'Student deleted' });
