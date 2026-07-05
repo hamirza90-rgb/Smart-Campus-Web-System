@@ -37,19 +37,40 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [toast,setToast]=useState(null);
   const [data,setData]=useState(initMockData.student);
   const [realAssignments,setRealAssignments]=useState([]);
+  const [realResults,setRealResults]=useState([]);
+  const [loadingResults,setLoadingResults]=useState(true);
   const [loadingAssignments,setLoadingAssignments]=useState(true);
-  const [notifications,setNotifications]=useState(initMockData.student.notifications);
+  const [notifications,setNotifications]=useState([]);
   const [qrScanning,setQrScanning]=useState(false);
   const [qrScanned,setQrScanned]=useState(false);
   const [uploadedFile,setUploadedFile]=useState(null);
   const [selAssign,setSelAssign]=useState('');
   const [submitStatuses,setSubmitStatuses]=useState({});
   const [searchTerm,setSearchTerm]=useState('');
-  const [courses,setCourses]=useState(initMockData.student.courses);
+  const [courses,setCourses]=useState([]);
+   const [loadingCourses,setLoadingCourses]=useState(true);
   const [showAddCourse,setShowAddCourse]=useState(false);
   const [newCourse,setNewCourse]=useState({name:'',teacher:'',code:'',lectures:''});
   // Merge: local + admin + teacher notifications
   const studentClass='FSc Pre-Eng Sec B';
+  useEffect(()=>{
+    apiCall('/courses')
+      .then(data=>{
+        if(Array.isArray(data)){
+          const myCourses=data.filter(c=>c.class===studentClass).map(c=>({
+            id:c._id,
+            name:c.name,
+            teacher:c.teacher,
+            code:c.code||'',
+            lectures:c.chapters||0,
+            notes:[]
+          }));
+          setCourses(myCourses);
+        } else setCourses([]);
+        setLoadingCourses(false);
+      })
+      .catch(()=>{ setCourses([]); setLoadingCourses(false); });
+  },[]);
   useEffect(()=>{
     apiCall(`/assignments/class/${encodeURIComponent(studentClass)}`)
       .then(data=>{
@@ -69,13 +90,47 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
       .catch(()=>setRealAssignments([]))
       .finally(()=>setLoadingAssignments(false));
   },[]);
-  const adminNotifsForStudent=(adminAnns||[])
+  const [realAnns,setRealAnns]=useState([]);
+  useEffect(()=>{
+    apiCall('/announcements')
+      .then(data=>{
+        if(Array.isArray(data)) setRealAnns(data);
+        else setRealAnns([]);
+      })
+      .catch(()=>setRealAnns([]));
+  },[]);
+  useEffect(()=>{
+    if(user?.id){
+      apiCall(`/studentresults/${user.id}`)
+        .then(data=>{
+          if(Array.isArray(data)){
+            setRealResults(data.map(r=>({
+              subject:r.subject,
+              marks:r.marks,
+              total:r.total,
+              grade: r.marks>=90?'A+':r.marks>=80?'A':r.marks>=70?'B+':r.marks>=60?'B':r.marks>=50?'C':r.marks>=40?'D':'F'
+            })));
+          } else setRealResults([]);
+        })
+        .catch(()=>setRealResults([]))
+        .finally(()=>setLoadingResults(false));
+    }
+  },[user]);
+  const adminNotifsForStudent=(realAnns||[])
     .filter(a=>a.audience==='All Students & Teachers'||a.audience==='Students Only'||(a.audience&&a.audience.startsWith('Class:')&&a.audience.includes(studentClass)))
-    .map(a=>({id:'adm_'+a.id,color:a.color||'#C0392B',text:'[Admin] '+a.title+(a.msg?': '+a.msg:''),time:a.time,read:false,_src:'admin'}));
+    .map(a=>({id:'adm_'+a._id,color:a.color||'#C0392B',text:'[Admin] '+a.title+(a.msg?': '+a.msg:''),time:a.time,read:false,_src:'admin'}));
   const teacherNotifsForStudent=(teacherNotifs||[])
     .map(n=>({id:'tch_'+n.id,color:'#1D9E75',text:'[Teacher] '+n.text,time:n.time,read:false,_src:'teacher'}));
   const allNotifs=[...teacherNotifsForStudent,...adminNotifsForStudent,...notifications];
-  const [extReadIds,setExtReadIds]=useState(new Set());
+  const [extReadIds,setExtReadIds]=useState(()=>{
+    try{
+      const saved=localStorage.getItem('readNotifIds');
+      return saved?new Set(JSON.parse(saved)):new Set();
+    }catch{ return new Set(); }
+  });
+  useEffect(()=>{
+    localStorage.setItem('readNotifIds',JSON.stringify([...extReadIds]));
+  },[extReadIds]);
   const markExtRead=(id)=>setExtReadIds(prev=>new Set([...prev,id]));
   const isNotifRead=(n)=>n._src?extReadIds.has(n.id):n.read;
   const unread=allNotifs.filter(n=>!isNotifRead(n)).length;
@@ -100,16 +155,17 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const handleDownload=(name,content)=>{
     const isResultCard=name.includes('Result_Card');
     const isTranscript=name.includes('Transcript');
-    const avg=Math.round(data.results.reduce((a,r)=>a+r.marks,0)/data.results.length);
-    const totalObtained=data.results.reduce((a,r)=>a+r.marks,0);
-    const totalMax=data.results.reduce((a,r)=>a+r.total,0);
+    const activeResults=realResults.length>0?realResults:data.results;
+const avg=Math.round(activeResults.reduce((a,r)=>a+r.marks,0)/activeResults.length);
+const totalObtained=activeResults.reduce((a,r)=>a+r.marks,0);
+const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
     const pct=Math.round(totalObtained/totalMax*100);
     const getGrade=(p)=>p>=90?'A+':p>=80?'A':p>=70?'B+':p>=60?'B':p>=50?'C':p>=40?'D':'F';
     const overallGrade=getGrade(pct);
     const todayStr=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
 
     if(isResultCard){
-      const rowsHtml=data.results.map((r,i)=>{
+      const rowsHtml=activeResults.map((r,i)=>{
         const p=Math.round(r.marks/r.total*100);
         const g=getGrade(p);
         const statusColor=p>=40?'#1a7a4a':'#b91c1c';
@@ -125,10 +181,11 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
       const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
 <title>Result Card — ${data.name}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',sans-serif;background:#f1f5f9;display:flex;justify-content:center;padding:30px 16px;min-height:100vh}
-  .page{width:750px;background:#fff;border-radius:12px;box-shadow:0 4px 32px rgba(0,0,0,0.12);overflow:hidden}
+  body{font-family:'Times New Roman',Times,serif;background:#f1f5f9;display:flex;justify-content:center;padding:30px 16px;min-height:100vh;font-size:14px}
+  .page{width:750px;background:#fff;border-radius:8px;box-shadow:0 4px 32px rgba(0,0,0,0.12);overflow:hidden;font-family:'Times New Roman',Times,serif}
+  table{font-family:'Times New Roman',Times,serif;font-size:14px}
+  th,td{font-family:'Times New Roman',Times,serif;font-size:14px}
   @media print{body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0;width:100%}.no-print{display:none!important}}
 </style>
 </head><body>
@@ -139,7 +196,7 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
       <svg viewBox="0 0 40 40" width="46" height="46"><circle cx="20" cy="20" r="18" fill="#0f2444"/><text x="20" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#fff" font-family="serif">PGC</text></svg>
     </div>
     <div>
-      <div style="font-family:'Noto Serif',serif;font-size:22px;font-weight:700;letter-spacing:0.01em">Punjab Group of Colleges</div>
+      <div style="font-family:'Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:0.01em">Punjab Group of Colleges</div>
       <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.7;margin-top:3px">Gujrat Campus · Smart Campus Web System</div>
     </div>
     <div style="margin-left:auto;text-align:right">
@@ -149,7 +206,7 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   </div>
   <!-- Student Info Bar -->
   <div style="background:#f8fafc;border-bottom:2px solid #e2e8f0;padding:16px 32px;display:flex;gap:40px;flex-wrap:wrap">
-    ${[['Student Name',data.name],['Roll Number','FSc-B-041'],['Class / Section',data.section],['Program','FSc Pre-Engineering'],['Issue Date',todayStr]].map(([l,v])=>`<div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px">${l}</div><div style="font-size:13.5px;font-weight:600;color:#111">${v}</div></div>`).join('')}
+    ${[['Student Name',user.name||data.name],['Roll Number',user.roll||'FSc-B-041'],['Class / Section',data.section],['Program','FSc Pre-Engineering'],['Issue Date',todayStr]].map(([l,v])=>`<div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px">${l}</div><div style="font-size:13.5px;font-weight:600;color:#111">${v}</div></div>`).join('')}
   </div>
   <!-- Table -->
   <div style="padding:24px 32px">
@@ -179,13 +236,13 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
 </body></html>`;
       const blob=new Blob([html],{type:'text/html'});
       const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');a.href=url;a.download='Result_Card_March2026.html';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+      const a=document.createElement('a');a.href=url;a.download=`Result_Card_${user.name||'Student'}_${new Date().getFullYear()}.html`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
       showToast('✅ Result Card downloaded — open in browser to Print/Save PDF');
       return;
     }
 
     if(isTranscript){
-      const rowsHtml=data.results.map((r,i)=>{
+      const rowsHtml=activeResults.map((r,i)=>{
         const p=Math.round(r.marks/r.total*100);
         const g=getGrade(p);
         return `<tr style="background:${i%2===0?'#f9fafb':'#ffffff'}">
@@ -230,7 +287,7 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   <div style="padding:22px 32px;background:#fffbf5;border-bottom:2px solid #e7d7c9">
     <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px">Student Information</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
-      ${[['Student Name',data.name],['Father\'s Name','Muhammad Imtiaz'],['Roll Number','FSc-B-041'],['Program','FSc Pre-Engineering'],['Section / Class',data.section],['Academic Session','2025 – 2026'],['CNIC / B-Form No','XXXXX-XXXXXXX-X'],['Enrollment Date','01 Sept 2025'],['Issue Date',todayStr]].map(([l,v])=>`<div style="background:#fff;border:1px solid #e7d7c9;border-radius:8px;padding:10px 14px"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">${l}</div><div style="font-size:13px;font-weight:600;color:#111">${v}</div></div>`).join('')}
+      ${[['Student Name',user.name||data.name],['Father\'s Name','-'],['Roll Number',user.roll||'FSc-B-041'],['Program','FSc Pre-Engineering'],['Section / Class',data.section],['Academic Session','2025 – 2026'],['CNIC / B-Form No','XXXXX-XXXXXXX-X'],['Enrollment Date','01 Sept 2025'],['Issue Date',todayStr]].map(([l,v])=>`<div style="background:#fff;border:1px solid #e7d7c9;border-radius:8px;padding:10px 14px"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">${l}</div><div style="font-size:13px;font-weight:600;color:#111">${v}</div></div>`).join('')}
     </div>
   </div>
   <!-- Academic Record -->
@@ -267,7 +324,7 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
 </body></html>`;
       const blob=new Blob([html],{type:'text/html'});
       const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');a.href=url;a.download='Official_Transcript_Laiba_Imtiaz.html';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+      const a=document.createElement('a');a.href=url;a.download=`Official_Transcript_${user.name||'Student'}.html`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
       showToast('✅ Transcript downloaded — open in browser to Print/Save PDF');
       return;
     }
@@ -299,7 +356,7 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
     {id:'s-perf',label:'Performance',icon:<svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" width="14" height="14"><polyline points="1,10 4,6 7,8 10,3 12,5"/></svg>},
   ];
 
-  const d={...data, assignments: realAssignments};
+  const d={...data, assignments: realAssignments, results: realResults};
   const filteredAssignments=d.assignments.filter(a=>a.subject.toLowerCase().includes(searchTerm.toLowerCase())||a.title.toLowerCase().includes(searchTerm.toLowerCase()));
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
 
@@ -351,7 +408,18 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
                 {d.assignments.filter(a=>a.status!=='Graded').slice(0,3).map(a=>(<div className="ri" key={a.id}><div><div className="rm">{a.subject} – {a.title}</div><div className="rs">Due: {a.due}</div></div><span className={`badge ${getStatusColor(a.status)}`}>{a.status}</span></div>))}
               </div>
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>Today's Schedule</div>
-                {[['Mathematics','8:00–9:30 · Room 12','bb'],['Physics','10:00–11:30 · Room 7','bg'],['English','12:30–2:00 · Room 3','ba']].map(([sub,time,c])=>(<div className="ri" key={sub}><div><div className="rm">{sub}</div><div className="rs">{time}</div></div><span className={`badge ${c}`}>{c==='bb'?'Now':c==='bg'?'Next':'Later'}</span></div>))}
+                {(()=>{
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const today=days[new Date().getDay()];
+  const todaySlots=(myTimetable||[]).map(row=>({time:row.time,subject:row[today]||''})).filter(r=>r.subject);
+  if(todaySlots.length===0) return <div style={{color:'rgba(255,255,255,0.25)',fontSize:11,padding:'8px 0'}}>No classes scheduled today.</div>;
+  return todaySlots.map((s,i)=>(
+    <div className="ri" key={i}>
+      <div><div className="rm">{s.subject}</div><div className="rs">{s.time}</div></div>
+      <span className={`badge ${i===0?'bb':i===1?'bg':'ba'}`}>{i===0?'Now':i===1?'Next':'Later'}</span>
+    </div>
+  ));
+})()}
               </div>
             </div>
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#7F77DD'}}></div>Attendance by Subject <button className="d-btn d-btn-blue" style={{marginLeft:'auto',fontSize:'9px',padding:'2px 8px'}} onClick={()=>setActivePane('s-attend')}>Full Details</button></div>
@@ -556,7 +624,22 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
                 {id:2,subject:'Physics',title:'Wave Motion Notes',submittedOn:'28 Mar 2026',status:'Checked',marks:'18/20',feedback:'Excellent diagrams!'},
               ]);
 
-              const allSubjects=['All','Physics','Chemistry','Mathematics','English','Biology','Computer','Urdu','Islamic Studies','Other'];
+              const allSubjects=useMemo(()=>{
+  const cls=studentClass.toLowerCase();
+  if(cls.includes('pre-eng')||cls.includes('pre eng'))
+    return['All','Physics','Chemistry','Mathematics','English','Urdu','Pak Studies','Islamic Studies','Other'];
+  if(cls.includes('pre-med')||cls.includes('pre med'))
+    return['All','Biology','Chemistry','Physics','English','Urdu','Pak Studies','Islamic Studies','Other'];
+  if(cls.includes('ics'))
+    return['All','Computer','Mathematics','Physics','English','Urdu','Pak Studies','Islamic Studies','Other'];
+  if(cls.includes('icom')||cls.includes('commerce'))
+    return['All','Accounting','Economics','Mathematics','English','Urdu','Pak Studies','Islamic Studies','Other'];
+  if(cls.includes('fa'))
+    return['All','Education','English','Urdu','Pak Studies','Islamic Studies','Fine Arts','Other'];
+  if(cls.includes('bsc'))
+    return['All','Mathematics','Physics','Chemistry','Biology','Computer Science','Statistics','English','Other'];
+  return['All','Physics','Chemistry','Mathematics','English','Biology','Computer','Urdu','Islamic Studies','Other'];
+},[studentClass]);
               const filteredAssignments2=d.assignments.filter(a=>{
                 const matchSubject=subjectFilter==='All'||a.subject===subjectFilter;
                 const matchStatus=statusFilter==='All'||a.status===statusFilter;

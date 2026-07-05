@@ -16,13 +16,22 @@ function App() {
   const [role, setRole] = useState(null);
   const [user, setUser] = useState(null);
   const [showRoleOverlay, setShowRoleOverlay] = useState(false);
-  const [portalCreds, setPortalCreds] = useState(defaultCreds);
+  const [portalCreds, setPortalCreds] = useState(()=>{
+    try{
+      const saved=localStorage.getItem('portalCreds');
+      return saved?JSON.parse(saved):defaultCreds;
+    }catch{ return defaultCreds; }
+  });
   const [classTimetables, setClassTimetables] = useState({});
   const [ttChangelog, setTtChangelog] = useState([]);
   const [adminAnns, setAdminAnns] = useState([]);
 
   const updateCred = (role, data) => {
-    setPortalCreds(prev => ({ ...prev, [role]: { ...prev[role], ...data } }));
+    setPortalCreds(prev => {
+      const updated={ ...prev, [role]: { ...prev[role], ...data } };
+      localStorage.setItem('portalCreds', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const handleSignIn = () => setShowRoleOverlay(true);

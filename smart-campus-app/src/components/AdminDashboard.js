@@ -182,15 +182,17 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
     if(!newUser.name||!newUser.email){ showToast('Please fill Name and Email'); return; }
     try{
       if(newUser.role==='Student'){
+        const initPw=newUser.password||`${newUser.name.split(' ')[0]}@PGC2026`;
         const data=await apiCall('/students','POST',{
           name:newUser.name,
           email:newUser.email,
           roll:newUser.roll||`FSc-A-0${Math.floor(Math.random()*90+10)}`,
           dept:newUser.dept||'FSc Pre-Eng',
-          phone:newUser.phone||''
+          phone:newUser.phone||'',
+          password:initPw
         });
         if(data.student) setAllStudents(prev=>[...prev,data.student]);
-        showToast(`Student "${newUser.name}" added to database!`);
+        showToast(`Student "${newUser.name}" added! Password: ${initPw}`);
       } else if(newUser.role==='Teacher'){
         const initPw=newUser.password||`${newUser.name.split(' ').pop()}@PGC2026`;
         const data=await apiCall('/teachers','POST',{
@@ -238,9 +240,18 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
 
   const saveEditTeacher=async()=>{
     try{
-      const data=await apiCall(`/teachers/${editingUser.id}`,'PUT',editingUser.data);
-      if(data.teacher) setAllTeachers(prev=>prev.map(t=>t._id===editingUser.id?data.teacher:t));
-      setEditingUser(null); showToast('Teacher updated in database!');
+      const payload={...editingUser.data};
+      if(!payload.password||payload.password.trim()==='') delete payload.password;
+      const data=await apiCall(`/teachers/${editingUser.id}`,'PUT',payload);
+      if(data.teacher){
+        setAllTeachers(prev=>prev.map(t=>t._id===editingUser.id?{...data.teacher}:t));
+      }
+      setEditingUser(null);
+      showToast('Teacher updated in database!');
+      // Re-fetch all teachers to make sure UI is in sync
+      apiCall('/teachers').then(d=>{
+        if(Array.isArray(d)) setAllTeachers(d);
+      });
     }catch(err){ showToast('Error updating teacher.'); }
   };
 
@@ -395,6 +406,11 @@ const sendAnn=async(scheduled=false)=>{
         <div className="sb-nav"><div className="nav-grp">Main</div>{navItems.map(n=>(<button key={n.id} className={`nav-item ${activePane===n.id?'active':''}`} onClick={()=>handlePaneChange(n.id)}>{n.label}</button>))}</div>
         <div className="sb-footer">
           <div className="sb-user"><div className="sb-av" style={{background:'rgba(192,57,43,0.35)'}}>AD</div><div><div className="sb-uname">{user?.name||'Administrator'}</div><div className="sb-urole">Admin Panel</div></div></div>
+          <button className="logout-btn" style={{marginBottom:4,background:'rgba(212,172,13,0.1)',border:'1px solid rgba(212,172,13,0.2)',color:'#D4AC0D'}} onClick={()=>{
+  if(window.confirm('Reset admin credentials? You will need to set your email and password again.')){
+    localStorage.removeItem('portalCreds');onLogout();window.location.reload();
+  }
+}}>🔄 Reset Credentials</button>
           <button className="logout-btn" onClick={onLogout}><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" width="12" height="12"><path d="M5 2H2v8h3"/><polyline points="8,4 11,6 8,8"/><line x1="5" y1="6" x2="11" y2="6"/></svg>Sign out</button>
         </div>
       </div>
@@ -409,7 +425,7 @@ const sendAnn=async(scheduled=false)=>{
             </div>
             <div className="twoC">
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>System Overview</div>
-                {[['Total Users',(allStudents.length+allTeachers.length+1)+''],['Active Sessions',sessionCount+''],['DB Size','2.4 GB'],['Uptime','99.9%']].map(([l,v])=>(<div className="ri" key={l}><div className="rm">{l}</div><span style={{color:'var(--white2)',fontSize:12,fontWeight:500}}>{v}</span></div>))}
+                {[['Total Users',(allStudents.length+allTeachers.length+1)+''],['Active Sessions',sessionCount+''],['DB Size',allStudents.length+allTeachers.length+' records'],['Uptime',uptimeHours+'h']].map(([l,v])=>(<div className="ri" key={l}><div className="rm">{l}</div><span style={{color:'var(--white2)',fontSize:12,fontWeight:500}}>{v}</span></div>))}
               </div>
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>Recent Activity</div>
                 {anns.slice(0,4).map(a=>(<div className="ri" key={a.id}><div><div className="rm">{a.title}</div><div className="rs">{a.time} · {a.audience}</div></div></div>))}
@@ -431,15 +447,25 @@ const sendAnn=async(scheduled=false)=>{
                     <div className="f-group"><div className="f-lab">Roll No</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.roll} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,roll:e.target.value}}))}/></div>
                   </div>
                   <div className="form-row">
-                    <div className="f-group"><div className="f-lab">Class / Dept</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.dept||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,dept:e.target.value}}))}/></div>
-                  </div>
+  <div className="f-group"><div className="f-lab">Class / Dept</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.dept||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,dept:e.target.value}}))}/></div>
+</div>
+<div className="form-row">
+  <div className="f-group"><div className="f-lab">Father's Name</div><input className="f-inp" style={{width:'100%'}} placeholder="Father's full name" value={editingUser.data.fatherName||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,fatherName:e.target.value}}))}/></div>
+</div>
+                  <div className="form-row">
+  <div className="f-group"><div className="f-lab">Email</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.email||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,email:e.target.value}}))}/></div>
+  <div className="f-group"><div className="f-lab">New Password (optional)</div><input className="f-inp" style={{width:'100%'}} autoComplete="new-password" placeholder="Leave blank to keep current" value={editingUser.data.password||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,password:e.target.value}}))}/></div>
+</div>
                   <div style={{display:'flex',gap:8}}><button className="d-btn d-btn-green" onClick={saveEditStudent}>✓ Save</button><button className="d-btn d-btn-blue" onClick={()=>setEditingUser(null)}>Cancel</button></div>
                 </>):(<>
                   <div className="form-row">
                     <div className="f-group"><div className="f-lab">Full Name</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.name} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,name:e.target.value}}))}/></div>
-                    <div className="f-group"><div className="f-lab">Email</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.email} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,email:e.target.value}}))}/></div>
+                    <div className="f-group"><div className="f-lab">Department</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.dept||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,dept:e.target.value}}))}/></div>
                   </div>
-                  <div className="f-group"><div className="f-lab">Department</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.dept} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,dept:e.target.value}}))}/></div>
+                  <div className="form-row">
+                    <div className="f-group"><div className="f-lab">Email</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.email||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,email:e.target.value}}))}/></div>
+                    <div className="f-group"><div className="f-lab">New Password (optional)</div><input className="f-inp" style={{width:'100%'}} placeholder="Leave blank to keep current" value={editingUser.data.password||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,password:e.target.value}}))}/></div>
+                  </div>
                   <div style={{display:'flex',gap:8,marginTop:8}}><button className="d-btn d-btn-green" onClick={saveEditTeacher}>✓ Save</button><button className="d-btn d-btn-blue" onClick={()=>setEditingUser(null)}>Cancel</button></div>
                 </>)}
               </div>
@@ -464,6 +490,9 @@ const sendAnn=async(scheduled=false)=>{
               {newUser.role==='Student'&&(
                 <div className="f-group"><div className="f-lab">Roll Number</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. FSc-A-041" value={newUser.roll||''} onChange={e=>setNewUser({...newUser,roll:e.target.value})}/></div>
               )}
+              {newUser.role==='Student'&&(
+  <div className="f-group"><div className="f-lab">Password (optional)</div><input className="f-inp" style={{width:'100%'}} placeholder="Default: FirstName@PGC2026" value={newUser.password||''} onChange={e=>setNewUser({...newUser,password:e.target.value})}/></div>
+)}
               {newUser.role==='Teacher'&&(
                 <div className="f-group"><div className="f-lab">Password</div><input className="f-inp" style={{width:'100%'}} placeholder="Min 8 characters" value={newUser.password||''} onChange={e=>setNewUser({...newUser,password:e.target.value})}/></div>
               )}
@@ -481,10 +510,22 @@ const sendAnn=async(scheduled=false)=>{
                 {loadingStudents&&<span style={{fontSize:10,color:'rgba(255,255,255,0.3)',marginLeft:8}}>Loading from database...</span>}
                 </div>
                 {filteredStudents.length===0&&!loadingStudents&&<div style={{color:'rgba(255,255,255,0.3)',textAlign:'center',padding:'20px 0',fontSize:12}}>No students found. Add students using "+ Add User" button.</div>}
-                {filteredStudents.length>0&&<table className="mt"><thead><tr><th>Name</th><th>Roll No</th><th>Class/Dept</th><th>Status</th><th>Actions</th></tr></thead>
+                {filteredStudents.length>0&&<table className="mt"><thead><tr><th>Name</th><th>Email</th><th>Roll No</th><th>Father's Name</th><th>Password</th><th>Class/Dept</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                   {filteredStudents.map(s=>(<tr key={s._id}>
-                    <td>{s.name}</td><td style={{fontSize:10}}>{s.roll}</td><td>{s.dept||'FSc Pre-Eng'}</td>
+                    <td>{s.name}</td><td style={{fontSize:10}}>{s.email}</td><td style={{fontSize:10}}>{s.roll}</td><td style={{fontSize:11}}>{s.fatherName||'—'}</td>
+<td style={{fontSize:10}}>
+  <td style={{fontSize:10}}>
+  <span id={`pw-${s._id}`} style={{fontFamily:'monospace'}}>••••••••</span>
+  <button onClick={()=>{
+    const el=document.getElementById(`pw-${s._id}`);
+    if(el.innerText==='••••••••'){el.innerText=s.password||'—';}
+    else{el.innerText='••••••••';}
+  }} style={{background:'none',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer',fontSize:10,padding:'0 4px',marginLeft:4}}>
+    👁
+  </button>
+</td>
+</td><td>{s.dept||'FSc Pre-Eng'}</td>
                     <td><span className={`badge ${s.status==='Active'?'bg':'br'}`}>{s.status||'Active'}</span></td>
                     <td><div style={{display:'flex',gap:4}}>
                       <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>setEditingUser({type:'student',id:s._id,data:{...s}})}>Edit</button>
@@ -503,14 +544,25 @@ const sendAnn=async(scheduled=false)=>{
                 {loadingTeachers&&<span style={{fontSize:10,color:'rgba(255,255,255,0.3)',marginLeft:8}}>Loading from database...</span>}
                 </div>
                 {filteredTeachers.length===0&&!loadingTeachers&&<div style={{color:'rgba(255,255,255,0.3)',textAlign:'center',padding:'20px 0',fontSize:12}}>No teachers found. Add teachers using "+ Add User" button.</div>}
-                {filteredTeachers.length>0&&<table className="mt"><thead><tr><th>Name</th><th>Dept</th><th>Status</th><th>Actions</th></tr></thead>
+                {filteredTeachers.length>0&&<table className="mt"><thead><tr><th>Name</th><th>Email</th><th>Password</th><th>Dept</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                   {filteredTeachers.map(t=>(<tr key={t._id}>
                     <td>{t.name}</td>
-                    <td>{t.dept}</td>
+<td style={{fontSize:10}}>{t.email}</td>
+<td style={{fontSize:10}}>
+  <span id={`tpw-${t._id}`} style={{fontFamily:'monospace'}}>••••••••</span>
+  <button onClick={()=>{
+    const el=document.getElementById(`tpw-${t._id}`);
+    if(el.innerText==='••••••••'){el.innerText=t.password||'—';}
+    else{el.innerText='••••••••';}
+  }} style={{background:'none',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer',fontSize:10,padding:'0 4px',marginLeft:4}}>
+    👁
+  </button>
+</td>
+<td>{t.dept}</td>
                     <td><span className={`badge ${t.status==='Active'?'bg':'br'}`}>{t.status}</span></td>
                     <td><div style={{display:'flex',gap:4}}>
-                      <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>setEditingUser({type:'teacher',id:t._id,data:{...t}})}>Edit</button>
+                      <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>setEditingUser({type:'teacher',id:t._id,data:{name:t.name,email:t.email,dept:t.dept,phone:t.phone||'',status:t.status,password:''}})}>Edit</button>
                       <button className="d-btn" style={{fontSize:'9px',padding:'2px 6px',background:t.status==='Active'?'rgba(192,57,43,0.15)':'rgba(29,131,72,0.15)',color:t.status==='Active'?'#f87171':'#4ade80',border:`1px solid ${t.status==='Active'?'rgba(192,57,43,0.3)':'rgba(29,131,72,0.3)'}`,borderRadius:4,cursor:'pointer'}} onClick={()=>toggleTeacherStatus(t._id)}>{t.status==='Active'?'🚫 Deactivate':'✅ Activate'}</button>
                       <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>deleteTeacher(t._id)}>Remove</button>
                     </div></td>
