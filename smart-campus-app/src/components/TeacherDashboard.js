@@ -1414,29 +1414,84 @@ useEffect(()=>{
               const [newCourse,setNewCourse]=useState({name:'',code:'',class:'',chapters:'',desc:'',status:'Active'});
               const [editingCourse,setEditingCourse]=useState(null);
               const [selCourse,setSelCourse]=useState(null);
-              const [chapters,setChapters]=useState({
-                1:[{id:1,title:'Ch 1 — Real Numbers',status:'Completed',notes:'Explained number types, irrational numbers covered.'},{id:2,title:'Ch 2 — Sets & Functions',status:'Completed',notes:'Domain, range, types of functions.'},{id:3,title:'Ch 3 — Limits',status:'In Progress',notes:'Currently on continuity section.'},{id:4,title:'Ch 4 — Differentiation',status:'Pending',notes:''},],
-                2:[{id:1,title:'Ch 1 — Polynomials',status:'Completed',notes:'All exercises done.'},{id:2,title:'Ch 2 — Trigonometry',status:'In Progress',notes:'Working on identities.'},{id:3,title:'Ch 3 — Sequences',status:'Pending',notes:''},],
-              });
+              const [chapters,setChapters]=useState({});
+useEffect(()=>{
+  if(!selCourse) return;
+  const token = localStorage.getItem('token');
+  fetch(`http://localhost:5000/api/chapters/course/${selCourse.id}`,{
+    headers:{'Authorization':`Bearer ${token}`}
+  })
+    .then(res=>res.json())
+    .then(data=>{
+      if(Array.isArray(data)){
+        setChapters(p=>({...p,[selCourse.id]:data.map(c=>({id:c._id,title:c.title,status:c.status,notes:c.notes}))}));
+      }
+    })
+    .catch(()=>{});
+},[selCourse]);
               const [newChapter,setNewChapter]=useState({title:'',status:'Pending',notes:''});
               const [editingChap,setEditingChap]=useState(null);
 
-              const addCourse=()=>{
-                if(!newCourse.name.trim()||!newCourse.class.trim()){showToast('Fill Course Name and Class','⚠');return;}
-                const id=Date.now();
-                setCourses(p=>[...p,{...newCourse,id,chapters:parseInt(newCourse.chapters)||0,progress:0}]);
-                setChapters(p=>({...p,[id]:[]}));
-                setNewCourse({name:'',code:'',class:'',chapters:'',desc:'',status:'Active'});
-                if(editingCourse)setEditingCourse(null);
-                setCourseTab('list');showToast('Course added!');
-              };
-              const deleteCourse=(id)=>{setCourses(p=>p.filter(c=>c.id!==id));showToast('Course deleted.','🗑');};
-              const startEdit=(c)=>{setNewCourse({...c});setEditingCourse(c);setCourseTab('add');};
-              const updateCourse=()=>{
-                setCourses(p=>p.map(c=>c.id===editingCourse.id?{...c,...newCourse}:c));
-                setEditingCourse(null);setNewCourse({name:'',code:'',class:'',chapters:'',desc:'',status:'Active'});
-                setCourseTab('list');showToast('Course updated!');
-              };
+              const addCourse=async()=>{
+  if(!newCourse.name.trim()||!newCourse.class.trim()){showToast('Fill Course Name and Class','⚠');return;}
+  const token = localStorage.getItem('token');
+  try{
+    const res = await fetch('http://localhost:5000/api/courses',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+      body:JSON.stringify({
+        name:newCourse.name,
+        class:newCourse.class,
+        chapters:parseInt(newCourse.chapters)||0,
+        status:newCourse.status||'Active',
+        teacher:d.name
+      })
+    });
+    const data = await res.json();
+    const id = data._id || Date.now();
+    setCourses(p=>[...p,{...newCourse,id,chapters:parseInt(newCourse.chapters)||0,progress:0}]);
+    setChapters(p=>({...p,[id]:[]}));
+    showToast('Course added!');
+  }catch(e){
+    showToast('⚠️ Backend save nahi hua');
+  }
+  setNewCourse({name:'',code:'',class:'',chapters:'',desc:'',status:'Active'});
+  if(editingCourse)setEditingCourse(null);
+  setCourseTab('list');
+};
+const deleteCourse=async(id)=>{
+  setCourses(p=>p.filter(c=>c.id!==id));
+  try{
+    const token = localStorage.getItem('token');
+    await fetch(`http://localhost:5000/api/courses/${id}`,{
+      method:'DELETE',
+      headers:{'Authorization':`Bearer ${token}`}
+    });
+  }catch(e){}
+  showToast('Course deleted.','🗑');
+};
+const startEdit=(c)=>{setNewCourse({...c});setEditingCourse(c);setCourseTab('add');};
+const updateCourse=async()=>{
+  try{
+    const token = localStorage.getItem('token');
+    await fetch(`http://localhost:5000/api/courses/${editingCourse.id}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+      body:JSON.stringify({
+        name:newCourse.name,
+        class:newCourse.class,
+        chapters:parseInt(newCourse.chapters)||0,
+        status:newCourse.status
+      })
+    });
+    showToast('Course updated!');
+  }catch(e){
+    showToast('⚠️ Backend update nahi hua');
+  }
+  setCourses(p=>p.map(c=>c.id===editingCourse.id?{...c,...newCourse}:c));
+  setEditingCourse(null);setNewCourse({name:'',code:'',class:'',chapters:'',desc:'',status:'Active'});
+  setCourseTab('list');
+};
               const [uploadedFiles,setUploadedFiles]=useState({
                 1:[{id:1,name:'Chapter_1_Real_Numbers_Notes.pdf',uploadedOn:'01 Apr 2026',size:'1.2 MB',uploadedFile:null}],
                 2:[{id:1,name:'Polynomials_Practice_Questions.pdf',uploadedOn:'28 Mar 2026',size:'0.8 MB',uploadedFile:null}],
@@ -1470,19 +1525,49 @@ useEffect(()=>{
                   showToast(`Preview: ${entry.name} (original PDF would download here)`,'📄');
                 }
               };
-              const addChapter=()=>{
-                if(!newChapter.title.trim()){showToast('Enter chapter title','⚠');return;}
-                setChapters(p=>({...p,[selCourse.id]:[...(p[selCourse.id]||[]),{id:Date.now(),...newChapter}]}));
-                setNewChapter({title:'',status:'Pending',notes:''});
-                showToast('Chapter added!');
-              };
-              const toggleChapStatus=(chapId)=>{
-                setChapters(p=>({...p,[selCourse.id]:(p[selCourse.id]||[]).map(c=>c.id===chapId?{...c,status:c.status==='Completed'?'In Progress':c.status==='In Progress'?'Pending':'Completed'}:c)}));
-              };
-              const deleteChap=(chapId)=>{
-                setChapters(p=>({...p,[selCourse.id]:(p[selCourse.id]||[]).filter(c=>c.id!==chapId)}));
-                showToast('Chapter removed.','🗑');
-              };
+              const addChapter=async()=>{
+  if(!newChapter.title.trim()){showToast('Enter chapter title','⚠');return;}
+  const token = localStorage.getItem('token');
+  try{
+    const res = await fetch('http://localhost:5000/api/chapters',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+      body:JSON.stringify({ course: selCourse.id, title: newChapter.title, status: newChapter.status, notes: newChapter.notes })
+    });
+    const data = await res.json();
+    const id = data._id || Date.now();
+    setChapters(p=>({...p,[selCourse.id]:[...(p[selCourse.id]||[]),{id,title:newChapter.title,status:newChapter.status,notes:newChapter.notes}]}));
+    showToast('Chapter added!');
+  }catch(e){
+    showToast('⚠️ Backend save nahi hua');
+  }
+  setNewChapter({title:'',status:'Pending',notes:''});
+};
+const toggleChapStatus=async(chapId)=>{
+  const chap=(chapters[selCourse.id]||[]).find(c=>c.id===chapId);
+  if(!chap) return;
+  const newStatus = chap.status==='Completed'?'In Progress':chap.status==='In Progress'?'Pending':'Completed';
+  setChapters(p=>({...p,[selCourse.id]:(p[selCourse.id]||[]).map(c=>c.id===chapId?{...c,status:newStatus}:c)}));
+  try{
+    const token = localStorage.getItem('token');
+    await fetch(`http://localhost:5000/api/chapters/${chapId}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+      body:JSON.stringify({ status: newStatus })
+    });
+  }catch(e){}
+};
+const deleteChap=async(chapId)=>{
+  setChapters(p=>({...p,[selCourse.id]:(p[selCourse.id]||[]).filter(c=>c.id!==chapId)}));
+  try{
+    const token = localStorage.getItem('token');
+    await fetch(`http://localhost:5000/api/chapters/${chapId}`,{
+      method:'DELETE',
+      headers:{'Authorization':`Bearer ${token}`}
+    });
+  }catch(e){}
+  showToast('Chapter removed.','🗑');
+};
               const chapList=selCourse?(chapters[selCourse.id]||[]):[];
               const completed=chapList.filter(c=>c.status==='Completed').length;
               const inProg=chapList.filter(c=>c.status==='In Progress').length;
@@ -1689,22 +1774,57 @@ useEffect(()=>{
               const [sentList,setSentList]=useState(initMockData.student.notifications.slice(0,4).map(n=>({...n,to:'All Students',readBy:['Laiba Imtiaz']})));
               const [editingNotif,setEditingNotif]=useState(null);
               const [tReadIds,setTReadIds]=useState(new Set());
+              useEffect(()=>{
+  fetch('http://localhost:5000/api/announcements')
+    .then(res=>res.json())
+    .then(data=>{
+      if(Array.isArray(data)){
+        setSentList(data.map(a=>({
+          id:a._id,
+          text:a.title+': '+a.msg,
+          time:a.scheduled?('Scheduled: '+(a.schedDate?new Date(a.schedDate).toLocaleDateString('en-GB'):'')):new Date(a.createdAt).toLocaleString('en-GB'),
+          color:a.type==='Class Cancel'?'#C0392B':a.type==='Exam Schedule'?'#D4AC0D':a.type==='Makeup Class'?'#7F77DD':'#1D9E75',
+          to:a.audience,
+          type:a.type||'Announcement',
+          scheduled:!!a.scheduled,
+          readBy:[]
+        })));
+      }
+    }).catch(()=>{});
+},[]);
 
               const notifTypes=['Announcement','Class Cancel','Makeup Class','Assignment Due','Exam Schedule','General Reminder','Holiday Notice','Other'];
               const sendTargets=['All Students',...myClasses.map(c=>c.name),'Group A','Group B','Individual Student'];
 
               const sendOrUpdate = async () => {
   if(!notifTitle.trim()||!notifMsg.trim()){showToast('Fill title and message','⚠');return;}
-  
+  const token = localStorage.getItem('token');
+
   if(editingNotif){
+    try {
+      await fetch(`http://localhost:5000/api/announcements/${editingNotif.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          title: notifTitle,
+          msg: notifMsg,
+          audience: notifTo === 'All Students' ? 'All Students & Teachers' : notifTo,
+          type: notifType,
+          scheduled: !!schedDate,
+          schedDate: schedDate
+        })
+      });
+      showToast('✅ Notification updated!');
+    } catch(e) {
+      showToast('⚠️ Backend update nahi hua');
+    }
     setSentList(prev=>prev.map(n=>n.id===editingNotif.id?{...n,text:notifTitle+': '+notifMsg,to:notifTo,type:notifType,time:'Just now (edited)'}:n));
     if(setTeacherNotifs) setTeacherNotifs(prev=>prev.map(n=>n.id===editingNotif.id?{...n,text:notifTitle+': '+notifMsg}:n));
-    setEditingNotif(null); showToast('✅ Notification updated!');
+    setEditingNotif(null);
   } else {
-    // Backend pe save karo
+    let realId = Date.now();
     try {
-      const token = localStorage.getItem('token');
-      await fetch('http://localhost:5000/api/announcements', {
+      const res = await fetch('http://localhost:5000/api/announcements', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1719,18 +1839,31 @@ useEffect(()=>{
           schedDate: schedDate
         })
       });
+      const data = await res.json();
+      if(data.ann && data.ann._id) realId = data.ann._id;
       showToast('🔔 Notification sent & saved!');
     } catch(e) {
       showToast('⚠️ Backend save nahi hua');
     }
-    
-    const newN={id:Date.now(),text:notifTitle+': '+notifMsg,time:schedDate?'Scheduled: '+schedDate:'Just now',color:notifType==='Class Cancel'?'#C0392B':notifType==='Exam Schedule'?'#D4AC0D':notifType==='Makeup Class'?'#7F77DD':'#1D9E75',to:notifTo,type:notifType,scheduled:!!schedDate,readBy:[]};
+
+    const newN={id:realId,text:notifTitle+': '+notifMsg,time:schedDate?'Scheduled: '+schedDate:'Just now',color:notifType==='Class Cancel'?'#C0392B':notifType==='Exam Schedule'?'#D4AC0D':notifType==='Makeup Class'?'#7F77DD':'#1D9E75',to:notifTo,type:notifType,scheduled:!!schedDate,readBy:[]};
     setSentList(p=>[newN,...p]);
     if(setTeacherNotifs) setTeacherNotifs(prev=>[newN,...prev]);
   }
   setNotifTitle('');setNotifMsg('');setSchedDate('');setSchedTime('');
 };
-              const deleteNotif=(id)=>{setSentList(p=>p.filter(n=>n.id!==id));if(setTeacherNotifs)setTeacherNotifs(p=>p.filter(n=>n.id!==id));showToast('Deleted.','🗑');};
+              const deleteNotif=async(id)=>{
+  setSentList(p=>p.filter(n=>n.id!==id));
+  if(setTeacherNotifs)setTeacherNotifs(p=>p.filter(n=>n.id!==id));
+  try{
+    const token = localStorage.getItem('token');
+    await fetch(`http://localhost:5000/api/announcements/${id}`,{
+      method:'DELETE',
+      headers:{'Authorization':`Bearer ${token}`}
+    });
+  }catch(e){}
+  showToast('Deleted.','🗑');
+};
               const startEditNotif=(n)=>{
                 const parts=n.text.split(': ');
                 setNotifTitle(parts[0]||'');
