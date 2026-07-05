@@ -52,7 +52,8 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [showAddCourse,setShowAddCourse]=useState(false);
   const [newCourse,setNewCourse]=useState({name:'',teacher:'',code:'',lectures:''});
   // Merge: local + admin + teacher notifications
-  const studentClass='FSc Pre-Eng Sec B';
+const studentClass = user.dept || 'FSc Pre-Eng Sec B';
+const studentId=user.roll||'FSc-2026-B-041';
   useEffect(()=>{
     apiCall('/courses')
       .then(data=>{
@@ -99,6 +100,16 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
       })
       .catch(()=>setRealAnns([]));
   },[]);
+  const [realAttendance,setRealAttendance]=useState([]);
+useEffect(()=>{
+  apiCall(`/attendance/class/${encodeURIComponent(studentClass)}`)
+    .then(data=>{
+      if(Array.isArray(data)){
+        setRealAttendance(data.filter(r=>r.rollNo===studentId));
+      } else setRealAttendance([]);
+    })
+    .catch(()=>setRealAttendance([]));
+},[]);
   useEffect(()=>{
     if(user?.id){
       apiCall(`/studentresults/${user.id}`)
@@ -356,7 +367,23 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
     {id:'s-perf',label:'Performance',icon:<svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" width="14" height="14"><polyline points="1,10 4,6 7,8 10,3 12,5"/></svg>},
   ];
 
-  const d={...data, assignments: realAssignments, results: realResults};
+  const attPresent=realAttendance.filter(r=>r.status==='P').length;
+const attAbsent=realAttendance.filter(r=>r.status==='A').length;
+const attTotal=realAttendance.length;
+const attOverall=attTotal>0?Math.round((attPresent/attTotal)*100):0;
+const attLog=[...realAttendance].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>({
+  date:new Date(r.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}),
+  subject:r.class,
+  status:r.status==='P'?'Present':r.status==='A'?'Absent':'Leave'
+}));
+const d={
+  ...data,
+  assignments: realAssignments,
+  results: realResults,
+  attendance: { overall: attOverall, present: attPresent, absent: attAbsent, log: attLog, subjects: [] }
+};
+const avgMarks = d.results.length>0 ? Math.round(d.results.reduce((a,r)=>a+r.marks,0)/d.results.length) : 0;
+const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks)) : 0;
   const filteredAssignments=d.assignments.filter(a=>a.subject.toLowerCase().includes(searchTerm.toLowerCase())||a.title.toLowerCase().includes(searchTerm.toLowerCase()));
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
 
@@ -400,7 +427,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
             <div className="sg">
               <div className="sc sc-green" onClick={()=>setActivePane('s-attend')}><div className="sc-icon"><svg viewBox="0 0 15 15" fill="none" stroke="#1D9E75" strokeWidth="1.3" width="14"><circle cx="7.5" cy="7.5" r="5.5"/><polyline points="5,7.5 7,9.5 10.5,5.5"/></svg></div><div className="sc-l">Attendance</div><div className="sc-v">{d.attendance.overall}%</div><div className="sc-s">Click to view →</div></div>
               <div className="sc sc-blue" onClick={()=>setActivePane('s-assign')}><div className="sc-icon"><svg viewBox="0 0 15 15" fill="none" stroke="#2471A3" strokeWidth="1.3" width="14"><rect x="2" y="1" width="11" height="13" rx="1.5"/><line x1="5" y1="5" x2="10" y2="5"/><line x1="5" y1="7.5" x2="10" y2="7.5"/></svg></div><div className="sc-l">Assignments</div><div className="sc-v">{d.assignments.length}</div><div className="sc-s">{d.assignments.filter(a=>a.status==='Pending').length} pending</div></div>
-              <div className="sc sc-purple" onClick={()=>setActivePane('s-result')}><div className="sc-icon"><svg viewBox="0 0 15 15" fill="none" stroke="#7F77DD" strokeWidth="1.3" width="14"><polyline points="1,11 4,7 7,9 10.5,4.5 14,6"/></svg></div><div className="sc-l">Avg Marks</div><div className="sc-v">{Math.round(d.results.reduce((a,r)=>a+r.marks,0)/d.results.length)}%</div><div className="sc-s">Overall avg.</div></div>
+              <div className="sc sc-purple" onClick={()=>setActivePane('s-result')}><div className="sc-icon"><svg viewBox="0 0 15 15" fill="none" stroke="#7F77DD" strokeWidth="1.3" width="14"><polyline points="1,11 4,7 7,9 10.5,4.5 14,6"/></svg></div><div className="sc-l">Avg Marks</div><div className="sc-v">{avgMarks}%</div><div className="sc-s">Overall avg.</div></div>
               <div className="sc sc-red" onClick={()=>setActivePane('s-notif')}><div className="sc-icon"><svg viewBox="0 0 15 15" fill="none" stroke="#C0392B" strokeWidth="1.3" width="14"><path d="M7.5 1a4.5 4.5 0 0 1 4.5 4.5c0 3.5 1.3 4.5 1.3 4.5H1.7s1.3-1 1.3-4.5A4.5 4.5 0 0 1 7.5 1z"/><line x1="7.5" y1="14" x2="7.5" y2="11.5"/></svg></div><div className="sc-l">Notifications</div><div className="sc-v">{unread}</div><div className="sc-s">Unread</div></div>
             </div>
             <div className="twoC">
@@ -421,9 +448,6 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
   ));
 })()}
               </div>
-            </div>
-            <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#7F77DD'}}></div>Attendance by Subject <button className="d-btn d-btn-blue" style={{marginLeft:'auto',fontSize:'9px',padding:'2px 8px'}} onClick={()=>setActivePane('s-attend')}>Full Details</button></div>
-              {d.attendance.subjects.map(s=>(<div className="pr" key={s.name}><span className="pl">{s.name}</span><div className="pb"><div className="pf" style={{width:`${s.pct}%`,background:s.color}}/></div><span className="pv">{s.pct}%</span></div>))}
             </div>
             {allNotifs.filter(n=>!isNotifRead(n)).length>0&&(
               <div className="card">
@@ -448,7 +472,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
           <div className={`panel ${activePane==='s-attend'?'active':''}`}>
             {(()=>{
               const [showFullQR,setShowFullQR]=useState(false);
-              const studentId=d.roll||'FSc-2026-B-041';
+              const studentId=user.roll||'FSc-2026-B-041';
               const studentName=user.name||d.name;
 
               // ── REAL UNIQUE QR (v26 logic) ────────────────────────────────────────
@@ -564,28 +588,11 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
                 </div>
                 </div>{/* end side-by-side grid */}
 
-                <div className="twoC">
-                  {/* Subject-wise Attendance */}
-                  <div className="card">
-                    <div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>Subject-wise Attendance</div>
-                    {d.attendance.subjects.map(s=>(
-                      <div key={s.name} style={{marginBottom:10}}>
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                          <span style={{fontSize:11.5,color:'var(--white2)',fontWeight:500}}>{s.name.split(' ').slice(0,2).join(' ')}</span>
-                          <span style={{fontSize:11,fontWeight:700,color:s.pct<75?'#f87171':'#4ade80'}}>{s.pct}%{s.pct<75&&<span style={{fontSize:9,marginLeft:4,color:'#f87171'}}>⚠ Low</span>}</span>
-                        </div>
-                        <div className="pb"><div className="pf" style={{width:`${s.pct}%`,background:s.pct<75?'#C0392B':s.color}}/></div>
-                        <div style={{fontSize:9,color:'rgba(255,255,255,0.28)',marginTop:2}}>{s.pct<75?'Risk: Below 75% minimum':'Good standing'}</div>
-                      </div>
-                    ))}
-                    {d.attendance.overall<75&&(
-                      <div style={{marginTop:12,background:'rgba(192,57,43,0.1)',border:'1px solid rgba(192,57,43,0.25)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'#f87171'}}>
-                        ⚠️ Your overall attendance is below 75%. Contact your class teacher for medical leave applications.
-                      </div>
-                    )}
-                  </div>
-
-                </div>
+                {d.attendance.overall<75&&(
+  <div style={{background:'rgba(192,57,43,0.1)',border:'1px solid rgba(192,57,43,0.25)',borderRadius:8,padding:'12px 16px',fontSize:11,color:'#f87171',marginBottom:14}}>
+    ⚠️ Your overall attendance is below 75%. Contact your class teacher for medical leave applications.
+  </div>
+)}
 
                 {/* Full-screen QR modal */}
                 {showFullQR&&(
@@ -839,8 +846,8 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
             </div>
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#7F77DD'}}></div>Overall Summary</div>
               <div className="analy-grid">
-                <div className="analy-card"><div className="analy-val">{Math.round(d.results.reduce((a,r)=>a+r.marks,0)/d.results.length)}%</div><div className="analy-lab">Average</div></div>
-                <div className="analy-card"><div className="analy-val">{Math.max(...d.results.map(r=>r.marks))}</div><div className="analy-lab">Highest</div></div>
+                <div className="analy-card"><div className="analy-val">{avgMarks}%</div><div className="analy-lab">Average</div></div>
+                <div className="analy-card"><div className="analy-val">{highestMarks}</div><div className="analy-lab">Highest</div></div>
                 <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>Pass</div><div className="analy-lab">Status</div></div>
               </div>
             </div>
@@ -1115,7 +1122,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
           <div className={`panel ${activePane==='s-perf'?'active':''}`}>
             <div className="analy-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
               <div className="analy-card"><div className="analy-val">{d.attendance.overall}%</div><div className="analy-lab">Attendance</div></div>
-              <div className="analy-card"><div className="analy-val">{Math.round(d.results.reduce((a,r)=>a+r.marks,0)/d.results.length)}%</div><div className="analy-lab">Avg Marks</div></div>
+              <div className="analy-card"><div className="analy-val">{avgMarks}%</div><div className="analy-lab">Avg Marks</div></div>
               <div className="analy-card"><div className="analy-val">{d.assignments.filter(a=>a.status==='Graded').length}</div><div className="analy-lab">Graded</div></div>
               <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>A</div><div className="analy-lab">Avg Grade</div></div>
             </div>
@@ -1126,14 +1133,11 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
                 ); })}
               </div>
             </div>
-            <div className="twoC">
-              <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>Attendance Trend</div>
-                {d.attendance.subjects.map(s=>(<div className="pr" key={s.name}><span className="pl">{s.name.substring(0,8)}</span><div className="pb"><div className="pf" style={{width:`${s.pct}%`,background:s.color}}/></div><span className="pv">{s.pct}%</span></div>))}
-              </div>
-              <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Assignment Progress</div>
-                {[['Submitted',d.assignments.filter(a=>a.status==='Graded').length,'#1D9E75'],['Pending',d.assignments.filter(a=>a.status==='Pending').length,'#C0392B'],['Draft',d.assignments.filter(a=>a.status==='Draft').length,'#D4AC0D']].map(([l,v,c])=>(<div className="pr" key={l}><span className="pl">{l}</span><div className="pb"><div className="pf" style={{width:`${(v/d.assignments.length)*100}%`,background:c}}/></div><span className="pv">{v}</span></div>))}
-              </div>
-            </div>
+            
+              <div className="card">
+  <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Assignment Progress</div>
+  {[['Submitted',d.assignments.filter(a=>a.status==='Graded').length,'#1D9E75'],['Pending',d.assignments.filter(a=>a.status==='Pending').length,'#C0392B'],['Draft',d.assignments.filter(a=>a.status==='Draft').length,'#D4AC0D']].map(([l,v,c])=>(<div className="pr" key={l}><span className="pl">{l}</span><div className="pb"><div className="pf" style={{width:`${(v/d.assignments.length)*100}%`,background:c}}/></div><span className="pv">{v}</span></div>))}
+</div>
           </div>
 
         </div>

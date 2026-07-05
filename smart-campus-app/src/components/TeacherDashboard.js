@@ -89,7 +89,8 @@ useEffect(()=>{
           roll: s.roll,
           attend: s.attend || 0,
           marks: s.marks || 0,
-          grade: s.grade || 'N/A'
+          grade: s.grade || 'N/A',
+          dept: s.dept
         })));
       }
     })
@@ -104,6 +105,19 @@ useEffect(()=>{
   const [realScannerOpen,setRealScannerOpen]=useState(false);
   const [camError,setCamError]=useState(false);
   const [myClasses,setMyClasses]=useState(d.classes);
+  useEffect(()=>{
+  if(realCourses.length>0){
+    const uniqueClasses=[...new Set(realCourses.map(c=>c.class))];
+    console.log('DEBUG realCourses:', realCourses);
+    console.log('DEBUG students:', students);
+    console.log('DEBUG uniqueClasses:', uniqueClasses);
+    setMyClasses(uniqueClasses.map(cls=>({
+      name: cls,
+      subject: realCourses.find(c=>c.class===cls)?.name||'',
+      students: students.filter(s=>s.dept===cls).length
+    })));
+  }
+},[realCourses, students]);
   const [showAddClass,setShowAddClass]=useState(false);
   const [newClass,setNewClass]=useState({name:'',subject:'',students:0});
   const [editClassObj,setEditClassObj]=useState(null);
@@ -213,9 +227,11 @@ const deleteStudent=async(id)=>{
       if(html5QrCodeRef.current) return;
       html5QrCode=new Html5Qrcode('att-qr-reader');
       html5QrCodeRef.current=html5QrCode;
-      const expectedQR=`${activeScanStudent.roll}_${activeScanStudent.name}`;
       const onScanSuccess=(decodedText)=>{
-        if(decodedText===expectedQR){
+  const parts=decodedText.split('|');
+  const scannedRoll=parts[1];
+  const scannedName=parts[2];
+  if(scannedRoll===activeScanStudent.roll && scannedName===activeScanStudent.name){
           stopScanner();
           setRealScannerOpen(false);
           setActiveScanStudent(null);
@@ -262,7 +278,7 @@ const deleteStudent=async(id)=>{
           {navItems.map(n=>(<button key={n.id} className={`nav-item ${activePane===n.id?'active':''}`} onClick={()=>setActivePane(n.id)}>{n.label}</button>))}
         </div>
         <div className="sb-footer">
-          <div className="sb-user"><div className="sb-av" style={{background:'rgba(29,131,72,0.35)'}}>AM</div><div><div className="sb-uname">{d.name}</div><div className="sb-urole">{d.dept}</div></div></div>
+          <div className="sb-user"><div className="sb-av" style={{background:'rgba(29,131,72,0.35)'}}>{(user.name||d.name)[0]}</div><div><div className="sb-uname">{user.name||d.name}</div><div className="sb-urole">{user.dept||d.dept}</div></div></div>
           <button className="logout-btn" onClick={onLogout}><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" width="12" height="12"><path d="M5 2H2v8h3"/><polyline points="8,4 11,6 8,8"/><line x1="5" y1="6" x2="11" y2="6"/></svg>Sign out</button>
         </div>
       </div>
@@ -1375,7 +1391,7 @@ useEffect(()=>{
                 📅 Your timetable is set by the admin. Slots with your name are highlighted. NEW badge = recently added by admin.
               </div>
               {(()=>{
-                const myLastName=d.name.toLowerCase().split(' ').pop();
+                const myLastName=(user.name||d.name).toLowerCase().split(' ').pop();
                 const myTtChangelog=(ttChangelog||[]).filter(c=>c.subject&&c.subject.toLowerCase().includes(myLastName));
                 const allClassEntries=Object.entries(classTimetables||{});
                 const myClassEntries=allClassEntries.filter(([cls,rows])=>rows.some(row=>['Mon','Tue','Wed','Thu','Fri'].some(day=>row[day]&&row[day].toLowerCase().includes(myLastName))));
