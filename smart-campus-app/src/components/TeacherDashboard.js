@@ -1092,9 +1092,10 @@ const startEdit=(a)=>{
               const [examClass,setExamClass]=useState(myClasses[0]?.name||'FSc Pre-Eng Sec A');
               const [totalMarks,setTotalMarks]=useState(100);
               const [resultRows,setResultRows]=useState(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
-              // eslint-disable-next-line react-hooks/exhaustive-deps
+  
               useEffect(()=>{
   setResultRows(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
 },[students]);
               const [showAddRow,setShowAddRow]=useState(false);
               const [newRow,setNewRow]=useState({name:'',roll:'',marks:0});

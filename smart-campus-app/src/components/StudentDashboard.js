@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { initMockData, getGradeColor, getStatusColor } from '../mockData';
 import { PGCLogo, Toast } from './homepage';
 const API = 'http://localhost:5000/api';
@@ -14,19 +14,6 @@ const apiCall = async (endpoint, method = 'GET', body = null) => {
   if (body) options.body = JSON.stringify(body);
   const res = await fetch(`${API}${endpoint}`, options);
   return res.json();
-};
-
-// ══ QR CODE ══
-function QRCode({scanning}){
-  const cells=[];
-  const p=[[1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],[1,0,1,1,1,0,1,0,1,0,1,0,1,1,1,0,1],[1,0,1,1,1,0,1,0,0,1,1,0,1,1,1,0,1],[1,0,1,1,1,0,1,0,1,0,0,0,1,1,1,0,1],[1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1],[0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],[1,0,1,1,0,1,1,1,0,0,1,1,0,1,1,0,1],[0,1,0,0,1,0,0,0,1,0,0,1,0,0,1,1,0],[1,1,1,1,1,1,1,0,1,0,0,1,1,0,1,0,1],[1,0,0,0,0,0,1,0,0,1,1,0,0,1,0,0,0],[1,0,1,1,1,0,1,0,1,0,0,1,1,1,0,1,1],[1,0,1,1,1,0,1,0,0,1,0,0,1,0,1,0,0],[1,0,1,1,1,0,1,0,1,0,1,1,0,1,1,1,1],[1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1,0],[1,1,1,1,1,1,1,0,1,1,0,1,1,1,0,0,1]];
-  p.forEach((row,r)=>row.forEach((cell,c)=>{ if(cell) cells.push(<rect key={`${r}-${c}`} x={c*4+1} y={r*4+1} width={3} height={3} fill="#000"/>); }));
-  return(
-    <div className="qr-box">
-      <svg viewBox="0 0 70 70" width="68" height="68" style={{display:'block'}}><rect width="70" height="70" fill="white"/>{cells}</svg>
-      {scanning&&<div className="qr-scan-line"/>}
-    </div>
-  );
 }
 function generateUniqueQRText(student){
   const today=new Date().toISOString().split('T')[0];
@@ -35,22 +22,14 @@ function generateUniqueQRText(student){
 function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,teacherNotifs}){
   const [activePane,setActivePane]=useState('s-home');
   const [toast,setToast]=useState(null);
-  const [data,setData]=useState(initMockData.student);
+  const [data]=useState(initMockData.student);
   const [realAssignments,setRealAssignments]=useState([]);
   const [realResults,setRealResults]=useState([]);
-  const [loadingResults,setLoadingResults]=useState(true);
-  const [loadingAssignments,setLoadingAssignments]=useState(true);
   const [notifications,setNotifications]=useState([]);
-  const [qrScanning,setQrScanning]=useState(false);
-  const [qrScanned,setQrScanned]=useState(false);
-  const [uploadedFile,setUploadedFile]=useState(null);
-  const [selAssign,setSelAssign]=useState('');
   const [submitStatuses,setSubmitStatuses]=useState({});
   const [searchTerm,setSearchTerm]=useState('');
   const [courses,setCourses]=useState([]);
-   const [loadingCourses,setLoadingCourses]=useState(true);
-  const [showAddCourse,setShowAddCourse]=useState(false);
-  const [newCourse,setNewCourse]=useState({name:'',teacher:'',code:'',lectures:''});
+  const [loadingCourses,setLoadingCourses]=useState(true);
   // Merge: local + admin + teacher notifications
 const studentClass = user.dept || 'FSc Pre-Eng Sec B';
 const studentId=user.roll||'FSc-2026-B-041';
@@ -71,6 +50,7 @@ const studentId=user.roll||'FSc-2026-B-041';
         setLoadingCourses(false);
       })
       .catch(()=>{ setCourses([]); setLoadingCourses(false); });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   useEffect(()=>{
     apiCall(`/assignments/class/${encodeURIComponent(studentClass)}`)
@@ -88,8 +68,8 @@ const studentId=user.roll||'FSc-2026-B-041';
           })));
         } else setRealAssignments([]);
       })
-      .catch(()=>setRealAssignments([]))
-      .finally(()=>setLoadingAssignments(false));
+      .catch(()=>setRealAssignments([]));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   const [realAnns,setRealAnns]=useState([]);
   useEffect(()=>{
@@ -109,6 +89,7 @@ useEffect(()=>{
       } else setRealAttendance([]);
     })
     .catch(()=>setRealAttendance([]));
+      // eslint-disable-next-line react-hooks/exhaustive-deps
 },[]);
   useEffect(()=>{
     if(user?.id){
@@ -123,8 +104,7 @@ useEffect(()=>{
             })));
           } else setRealResults([]);
         })
-        .catch(()=>setRealResults([]))
-        .finally(()=>setLoadingResults(false));
+        .catch(()=>setRealResults([]));
     }
   },[user]);
   const adminNotifsForStudent=(realAnns||[])
@@ -150,24 +130,10 @@ useEffect(()=>{
   const myTtChangelog=(ttChangelog||[]).filter(c=>c.cls===studentClass);
 
   const showToast=(msg,icon='✓')=>{ setToast({msg,icon}); setTimeout(()=>setToast(null),3000); };
-
-  const handleQRScan=()=>{
-    setQrScanning(true);
-    setTimeout(()=>{
-      setQrScanning(false);
-      setQrScanned(true);
-      showToast('✅ Attendance marked! QR scanned successfully for Mathematics.');
-      setData(prev=>({...prev,attendance:{...prev.attendance,present:prev.attendance.present+1,overall:Math.min(100,prev.attendance.overall+1),log:[{date:'7 Apr',subject:'Mathematics',method:'QR Scan',status:'Present'},...prev.attendance.log]}}));
-    },2000);
-  };
-
-  const handleFileSelect=()=>{ setUploadedFile('Assignment_'+Date.now()+'.pdf'); showToast('📎 File selected: Assignment PDF ready to submit.'); };
-  const handleSubmit=()=>{ if(!uploadedFile){ showToast('Please select a file first','⚠'); return; } showToast('Assignment submitted successfully!'); setSubmitStatuses(prev=>({...prev,[selAssign]:'Submitted'})); setUploadedFile(null); };
   const handleDownload=(name,content)=>{
     const isResultCard=name.includes('Result_Card');
     const isTranscript=name.includes('Transcript');
     const activeResults=realResults.length>0?realResults:data.results;
-const avg=Math.round(activeResults.reduce((a,r)=>a+r.marks,0)/activeResults.length);
 const totalObtained=activeResults.reduce((a,r)=>a+r.marks,0);
 const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
     const pct=Math.round(totalObtained/totalMax*100);
@@ -353,9 +319,6 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
     URL.revokeObjectURL(url);
     showToast(`✅ Downloaded: ${name}`);
   };
-  const addCourse=()=>{ if(!newCourse.name||!newCourse.teacher){ showToast('Please fill Name and Teacher','⚠'); return; } const c={id:Date.now(),...newCourse,lectures:parseInt(newCourse.lectures)||0,notes:[]}; setCourses(prev=>[...prev,c]); setNewCourse({name:'',teacher:'',code:'',lectures:''}); setShowAddCourse(false); showToast('Course added successfully!'); };
-  const deleteCourse=(id)=>{ setCourses(prev=>prev.filter(c=>c.id!==id)); showToast('Course removed.','🗑'); };
-
   const navItems=[
     {id:'s-home',label:'Dashboard',icon:<svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" width="14" height="14"><rect x="1" y="1" width="4.5" height="4.5" rx="1"/><rect x="7.5" y="1" width="4.5" height="4.5" rx="1"/><rect x="1" y="7.5" width="4.5" height="4.5" rx="1"/><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="1"/></svg>},
     {id:'s-attend',label:'Attendance',icon:<svg viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" width="14" height="14"><circle cx="6.5" cy="3.5" r="2.2"/><path d="M1 12c0-2.8 2.5-4.5 5.5-4.5s5.5 1.7 5.5 4.5"/></svg>},
@@ -384,7 +347,6 @@ const d={
 };
 const avgMarks = d.results.length>0 ? Math.round(d.results.reduce((a,r)=>a+r.marks,0)/d.results.length) : 0;
 const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks)) : 0;
-  const filteredAssignments=d.assignments.filter(a=>a.subject.toLowerCase().includes(searchTerm.toLowerCase())||a.title.toLowerCase().includes(searchTerm.toLowerCase()));
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
 
   return(
@@ -646,6 +608,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
   if(cls.includes('bsc'))
     return['All','Mathematics','Physics','Chemistry','Biology','Computer Science','Statistics','English','Other'];
   return['All','Physics','Chemistry','Mathematics','English','Biology','Computer','Urdu','Islamic Studies','Other'];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
 },[studentClass]);
               const filteredAssignments2=d.assignments.filter(a=>{
                 const matchSubject=subjectFilter==='All'||a.subject===subjectFilter;
@@ -668,8 +631,8 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                     studentId: user.id,
                     fileUrl: content
                   });
-                  const subject=d.assignments.find(a=>a.id==selAssignId)?.subject||customSubject;
-                  const title=d.assignments.find(a=>a.id==selAssignId)?.title||customTitle;
+                  const subject=d.assignments.find(a=>String(a.id)===selAssignId)?.subject||customSubject;
+                  const title=d.assignments.find(a=>String(a.id)===selAssignId)?.title||customTitle;
                   const newHistEntry={id:Date.now(),subject,title:title||'Assignment',submittedOn:new Date().toLocaleDateString('en-GB'),status:'Submitted',marks:'–',feedback:'–'};
                   setSubmissionHistory(prev=>[newHistEntry,...prev]);
                   setSubmitStatuses(prev=>({...prev,[selAssignId]:'Submitted'}));
@@ -949,6 +912,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                 document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
                 showToast(`✅ ${note.name} downloaded — open in browser to Print/Save PDF`);
               };
+              if(loadingCourses) return <div style={{textAlign:'center',padding:'30px 0',color:'rgba(255,255,255,0.3)'}}>Loading courses...</div>;
               return (
                 <>
                   <div style={{display:'flex',alignItems:'center',marginBottom:14}}>
