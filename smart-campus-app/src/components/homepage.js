@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { initMockData } from '../mockData';
 
 // ══ PGC LOGO ══
 function PGCLogo({size=32}){
@@ -63,29 +62,7 @@ useEffect(() => {
     })
     .catch(() => {});
 }, []);
-  const [contactForm,setContactForm]=useState({name:'',email:'',subject:'',msg:''});
-  const [formErrors,setFormErrors]=useState({});
-  const [toast,setToast]=useState(null);
-  const showToast=(msg,icon='✓')=>{ setToast({msg,icon}); setTimeout(()=>setToast(null),3000); };
-
   const scrollTo=(id)=>{ setTimeout(()=>{ const el=document.getElementById('section-'+id); if(el) el.scrollIntoView({behavior:'smooth'}); },50); };
-
-  const sendContact=async ()=>{
-    const errors={};
-    if(!contactForm.name.trim()) errors.name='Name is required';
-    if(!contactForm.email.trim()) errors.email='Email is required';
-    else if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactForm.email)) errors.email='Enter a valid email address (e.g. name@example.com)';
-    if(!contactForm.msg.trim()) errors.msg='Message is required';
-    setFormErrors(errors);
-    if(Object.keys(errors).length>0) return;
-    // Message is sent to info@pgc.edu.pk via EmailJS service
-    try{
-      await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:'service_pgc',template_id:'template_contact',user_id:'pgc_public_key',template_params:{from_name:contactForm.name,from_email:contactForm.email,subject:contactForm.subject||'Contact Form',message:contactForm.msg}})});
-    }catch(e){}
-    showToast('✉️ Message sent to info@pgc.edu.pk — We\'ll reply to '+contactForm.email+' soon.');
-    setContactForm({name:'',email:'',subject:'',msg:''});
-    setFormErrors({});
-  };
 
   const features=[
     {name:'Attendance Management',desc:'ESP32-CAM QR code-based automated attendance with anti-proxy, Present/Late/Absent auto-marking and percentage tracking.',color:'#2471A3',icon:'📊',page:'student'},
@@ -195,35 +172,6 @@ useEffect(() => {
             </div>
           ))}
         </div>
-        <div className="contact-form">
-          <div style={{color:' var(--white2)',fontSize:14,fontWeight:600,marginBottom:16}}>Send a Message</div>
-          <div className="cf-row">
-            <div className="cf-field">
-              <label className="cf-label">Your Name *</label>
-              <input className="cf-input" placeholder="Full name" value={contactForm.name} onChange={e=>{setContactForm({...contactForm,name:e.target.value});setFormErrors({...formErrors,name:''}); }}/>
-              {formErrors.name&&<div className="cf-error">⚠ {formErrors.name}</div>}
-            </div>
-            <div className="cf-field">
-              <label className="cf-label">Email *</label>
-              <input className="cf-input" type="email" placeholder="your@email.com" value={contactForm.email} onChange={e=>{setContactForm({...contactForm,email:e.target.value});setFormErrors({...formErrors,email:''}); }}/>
-              {formErrors.email&&<div className="cf-error">⚠ {formErrors.email}</div>}
-            </div>
-          </div>
-          <div className="cf-field">
-            <label className="cf-label">Subject</label>
-            <input className="cf-input" placeholder="Message subject" value={contactForm.subject} onChange={e=>setContactForm({...contactForm,subject:e.target.value})}/>
-          </div>
-          <div className="cf-field">
-            <label className="cf-label">Message *</label>
-            <textarea className="cf-input cf-textarea" placeholder="Write your message..." value={contactForm.msg} onChange={e=>{setContactForm({...contactForm,msg:e.target.value});setFormErrors({...formErrors,msg:''}); }}/>
-            {formErrors.msg&&<div className="cf-error">⚠ {formErrors.msg}</div>}
-          </div>
-          <button className="nav-cta" style={{borderRadius:8}} onClick={sendContact}>Send Message →</button>
-          <div style={{marginTop:10,fontSize:11,color:'rgba(255,255,255,0.25)',display:'flex',alignItems:'center',gap:6}}>
-            <span>✉️</span>
-            <span>Your message will be sent to <strong style={{color:'rgba(255,255,255,0.4)'}}>info@pgc.edu.pk</strong> — PGC Administration will reply to your email address.</span>
-          </div>
-        </div>
       </div>
 
       <footer className="home-footer">
@@ -237,7 +185,6 @@ useEffect(() => {
           <span className="footer-link" onClick={()=>scrollTo('contact')}>Contact</span>
         </div>
       </footer>
-      {toast&&<Toast msg={toast.msg} icon={toast.icon}/>}
     </div>
   );
 }
@@ -343,30 +290,12 @@ function GoogleOAuthModal({onClose,onSuccess}){
   const [fpSending,setFpSending]=useState(false);
   const fpSendCode=async()=>{
     if(!fpEmail||!fpEmail.includes('@')){ setFpEmailErr('Enter a valid email address'); return; }
-    const found=GOOGLE_USERS.find(u=>u.email.toLowerCase()===fpEmail.toLowerCase());
-    const targetEmail = found ? found.email : fpEmail;
-    const targetName = found ? found.name : fpEmail.split('@')[0].replace(/[._]/g,' ');
     const code=String(Math.floor(100000+Math.random()*900000));
     setFpGenCode(code);
     setFpEmailErr('');
     setFpSending(true);
-    try {
-      // EmailJS — sends real email to user's Gmail
-      // Setup: emailjs.com → create account → add service (Gmail) → add template → paste IDs below
-      await emailjs.send(
-        'service_8wqb56i',   // e.g. 'service_abc123'  ← from emailjs.com
-        'template_lwbvvjm',  // e.g. 'template_xyz'    ← from emailjs.com
-        {
-          to_email: targetEmail,
-          to_name: targetName,
-          otp_code: code,
-          app_name: 'PGC Smart Campus'
-        }
-      );
-    } catch(err) {
-      // If EmailJS not configured, show code in a styled in-page notice instead of alert
-      setFpDevCode(code);
-    }
+    // EmailJS abhi configure nahi hai — dev code hi dikha do (in-page notice mein)
+    setFpDevCode(code);
     setFpSending(false);
     setFpStep('code');
   };

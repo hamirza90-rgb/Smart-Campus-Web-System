@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { initMockData, getGradeColor, getStatusColor } from '../mockData';
+import { initMockData, getGradeColor } from '../mockData';
 import { PGCLogo, Toast } from './homepage';
 
 function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,teacherNotifs,setTeacherNotifs}){
   const [activePane,setActivePane]=useState('t-home');
   const [toast,setToast]=useState(null);
   const [attClass,setAttClass]=useState('FSc Pre-Eng Sec B');
-  const [attData,setAttData]=useState({});
-  const [tab,setTab]=useState('pending');
+  const [attData]=useState({});
   const [students,setStudents]=useState(initMockData.teacher.students);
   const [realCourses, setRealCourses] = useState([]);
 useEffect(()=>{
@@ -36,6 +35,7 @@ useEffect(()=>{
     const allRecords = results.flat();
     setHomeAttendance(allRecords);
   });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [realCourses]);
 const homeAvgAttendance = (() => {
   if (homeAttendance.length === 0) return 0;
@@ -55,6 +55,7 @@ useEffect(()=>{
   ).then(results => {
     setHomeResults(results.flat());
   });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [realCourses]);
 const topStudentsWithMarks = students.map(s => {
   const studentResults = homeResults.filter(r => r.student && (r.student._id === s._id));
@@ -118,10 +119,6 @@ useEffect(()=>{
     })));
   }
 },[realCourses, students]);
-  const [showAddClass,setShowAddClass]=useState(false);
-  const [newClass,setNewClass]=useState({name:'',subject:'',students:0});
-  const [editClassObj,setEditClassObj]=useState(null);
-  const [qrActive,setQrActive]=useState(false);
   const [attSaved,setAttSaved]=useState([]);
   const showToast=(msg)=>{ setToast(msg); setTimeout(()=>setToast(null),3000); };
 
@@ -146,12 +143,7 @@ useEffect(()=>{
   };
   // ── END QR SCANNER FUNCTIONS ─────────────────────────────────────────────
 
-  const toggleAtt=(name)=>setAttData(prev=>({...prev,[name]:!prev[name]||prev[name]==='P'?'A':prev[name]==='A'?'L':'P'}));
-  const getAttBadge=(s)=>!s||s==='P'?'bg':s==='A'?'br':'ba';
   const getAttFull=(s)=>!s||s==='P'?'Present':s==='A'?'Absent':'Leave';
-  const addMyClass=()=>{if(!newClass.name||!newClass.subject){showToast('Name & Subject required');return;}setMyClasses(p=>[...p,{...newClass,students:Math.max(0,parseInt(newClass.students)||0)}]);setNewClass({name:'',subject:'',students:0});setShowAddClass(false);showToast('Class added!');};
-  const delMyClass=(n)=>{setMyClasses(p=>p.filter(c=>c.name!==n));showToast('Class removed.');};
-  const saveEditClass=()=>{setMyClasses(p=>p.map(c=>c.name===editClassObj._orig?{name:editClassObj.name,subject:editClassObj.subject,students:editClassObj.students}:c));setEditClassObj(null);showToast('Class updated!');};
   const saveAndDownload=()=>{
     const date=new Date().toLocaleDateString('en-GB');
     const lines=[`PGC Attendance — ${attClass} — ${date}`,'='.repeat(40),...students.map(s=>`${s.name} (${s.roll}): ${getAttFull(attData[s.name])}`),'','Summary:',`Present: ${students.filter(s=>!attData[s.name]||attData[s.name]==='P').length}`,`Absent: ${students.filter(s=>attData[s.name]==='A').length}`,`Leave: ${students.filter(s=>attData[s.name]==='L').length}`];
@@ -335,7 +327,7 @@ const deleteStudent=async(id)=>{
               const [scannedNames,setScannedNames]=useState([]); // students marked present via QR
               const [manualData,setManualData]=useState({});
               const [attDate,setAttDate]=useState(new Date().toISOString().split('T')[0]);
-              const [scanAnim,setScanAnim]=useState(false);
+              const [scanAnim]=useState(false);
               const [lastScanned,setLastScanned]=useState(null);
               const [savedSessions,setSavedSessions]=useState(attSaved);
               const [stuSearch,setStuSearch]=useState('');
@@ -758,15 +750,6 @@ const deleteStudent=async(id)=>{
           <div className={`panel ${activePane==='t-assign'?'active':''}`}>
             {(()=>{
               const [tAssignTab,setTAssignTab]=useState('list');
-              const getTeacherIdFromToken = () => {
-  try {
-    const token = localStorage.getItem('token');
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.id;
-  } catch {
-    return null;
-  }
-};
               const [tAssignments,setTAssignments]=useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
@@ -891,6 +874,20 @@ useEffect(()=>{
   setTAssignments(prev=>prev.filter(a=>a.id!==id));
   showToast('Assignment deleted.','🗑️ ');
 };
+const startEdit=(a)=>{
+  setEditingAssign(a);
+  setNewAssign({
+    subject: a.subject,
+    cls: a.cls,
+    topic: a.topic,
+    instructions: a.instructions,
+    dueDate: a.dueDate,
+    assignedTo: a.assignedTo,
+    totalMarks: a.totalMarks,
+    file: null
+  });
+  setTAssignTab('create');
+};
 
               const saveGrade=async()=>{
   if(!tempMarks){ showToast('Enter marks','⚠️'); return; }
@@ -909,6 +906,17 @@ useEffect(()=>{
   showToast('✅ Grade and feedback saved successfully!');
 };
               const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,location:'Teacher Assignment Review Panel > Submissions Tab'}); setViewingSubmission(s); };
+              const handleDownload=(file,content)=>{
+  const text = content || `No content available for: ${file||'this submission'}`;
+  const blob = new Blob([text],{type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (file||'submission').replace(/[^\w.-]/g,'_')+'.txt';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✅ Downloaded');
+};
 
               return(<>
                 <div className="tab-row">{[['list','📋 Assignments'],['create',editingAssign?'✏️ Edit':'➕ Create New'],['submissions','📥 Submissions'],['grade','⭐ Grade']].map(([t,l])=><button key={t} className={`tab-btn ${tAssignTab===t?'active':''}`} onClick={()=>{setTAssignTab(t);if(t!=='create')setEditingAssign(null);}}>{l}</button>)}</div>
@@ -1084,6 +1092,7 @@ useEffect(()=>{
               const [examClass,setExamClass]=useState(myClasses[0]?.name||'FSc Pre-Eng Sec A');
               const [totalMarks,setTotalMarks]=useState(100);
               const [resultRows,setResultRows]=useState(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
+              // eslint-disable-next-line react-hooks/exhaustive-deps
               useEffect(()=>{
   setResultRows(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
 },[students]);
@@ -1487,7 +1496,6 @@ useEffect(()=>{
     .catch(()=>{});
 },[selCourse]);
               const [newChapter,setNewChapter]=useState({title:'',status:'Pending',notes:''});
-              const [editingChap,setEditingChap]=useState(null);
 
               const addCourse=async()=>{
   if(!newCourse.name.trim()||!newCourse.class.trim()){showToast('Fill Course Name and Class','⚠');return;}
@@ -1707,9 +1715,11 @@ const deleteChap=async(chapId)=>{
                         </td>
                         <td><span className={`badge ${c.status==='Active'?'bg':'bb'}`}>{c.status}</span></td>
                         <td><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                          <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('outline');}}>📋 Outline</button>
-                          <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('upload');}}>📤 Upload PDF</button>
-                        </div></td>
+          <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('outline');}}>📋 Outline</button>
+          <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('upload');}}>📤 Upload PDF</button>
+          <button className="d-btn" style={{background:'rgba(212,172,13,0.12)',color:'#D4AC0D',border:'1px solid rgba(212,172,13,0.25)',borderRadius:5,padding:'2px 7px',fontSize:'9px',cursor:'pointer'}} onClick={()=>startEdit(c)}>✎ Edit</button>
+          <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{if(window.confirm(`Delete course "${c.name}"? This cannot be undone.`))deleteCourse(c.id);}}>🗑 Delete</button>
+        </div></td>
                       </tr>);
                     })}</tbody></table>
                   </div>
