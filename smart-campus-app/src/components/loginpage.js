@@ -70,7 +70,7 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
       if(res.ok){
         setPassErr('');
         console.log('Student data being passed:', data);
-        onLogin('student',{id:data.id,name:data.name,email:data.email,roll:data.roll,dept:data.dept});
+        onLogin('student',{id:data.id,name:data.name,email:data.email,roll:data.roll,dept:data.dept,section:data.section});
       } else {
         setPassErr(data.message||'Login failed. Check email and password.');
       }

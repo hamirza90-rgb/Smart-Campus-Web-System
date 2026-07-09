@@ -32,6 +32,18 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [loadingCourses,setLoadingCourses]=useState(true);
   // Merge: local + admin + teacher notifications
 const studentClass = user.dept || 'FSc Pre-Eng Sec B';
+const studentSection = user.section || 'N/A';
+const getProgramName=(cls)=>{
+  const c=(cls||'').toLowerCase();
+  if(c.includes('pre-eng')||c.includes('pre eng')) return 'FSc Pre-Engineering';
+  if(c.includes('pre-med')||c.includes('pre med')) return 'FSc Pre-Medical';
+  if(c.includes('ics')) return 'ICS';
+  if(c.includes('icom')||c.includes('commerce')) return 'I.Com';
+  if(c.includes('fa')) return 'F.A';
+  if(c.includes('bsc')) return 'BSc';
+  return cls||'N/A';
+};
+const studentProgram=getProgramName(studentClass);
 const studentId=user.roll||'FSc-2026-B-041';
   useEffect(()=>{
     apiCall('/courses')
@@ -183,7 +195,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
   </div>
   <!-- Student Info Bar -->
   <div style="background:#f8fafc;border-bottom:2px solid #e2e8f0;padding:16px 32px;display:flex;gap:40px;flex-wrap:wrap">
-    ${[['Student Name',user.name||data.name],['Roll Number',user.roll||'FSc-B-041'],['Class / Section',data.section],['Program','FSc Pre-Engineering'],['Issue Date',todayStr]].map(([l,v])=>`<div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px">${l}</div><div style="font-size:13.5px;font-weight:600;color:#111">${v}</div></div>`).join('')}
+    ${[['Student Name',user.name||data.name],['Roll Number',user.roll||'FSc-B-041'],['Class / Section',studentSection],['Program',studentProgram],['Issue Date',todayStr]].map(([l,v])=>`<div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px">${l}</div><div style="font-size:13.5px;font-weight:600;color:#111">${v}</div></div>`).join('')}
   </div>
   <!-- Table -->
   <div style="padding:24px 32px">
@@ -264,7 +276,7 @@ const totalMax=activeResults.reduce((a,r)=>a+r.total,0);
   <div style="padding:22px 32px;background:#fffbf5;border-bottom:2px solid #e7d7c9">
     <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px">Student Information</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
-      ${[['Student Name',user.name||data.name],['Father\'s Name','-'],['Roll Number',user.roll||'FSc-B-041'],['Program','FSc Pre-Engineering'],['Section / Class',data.section],['Academic Session','2025 – 2026'],['CNIC / B-Form No','XXXXX-XXXXXXX-X'],['Enrollment Date','01 Sept 2025'],['Issue Date',todayStr]].map(([l,v])=>`<div style="background:#fff;border:1px solid #e7d7c9;border-radius:8px;padding:10px 14px"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">${l}</div><div style="font-size:13px;font-weight:600;color:#111">${v}</div></div>`).join('')}
+      ${[['Student Name',user.name||data.name],['Father\'s Name','-'],['Roll Number',user.roll||'FSc-B-041'],['Program',studentProgram],['Section / Class',studentSection],['Academic Session','2025 – 2026'],['CNIC / B-Form No','XXXXX-XXXXXXX-X'],['Enrollment Date','01 Sept 2025'],['Issue Date',todayStr]].map(([l,v])=>`<div style="background:#fff;border:1px solid #e7d7c9;border-radius:8px;padding:10px 14px"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">${l}</div><div style="font-size:13px;font-weight:600;color:#111">${v}</div></div>`).join('')}
     </div>
   </div>
   <!-- Academic Record -->
@@ -337,7 +349,8 @@ const attOverall=attTotal>0?Math.round((attPresent/attTotal)*100):0;
 const attLog=[...realAttendance].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>({
   date:new Date(r.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}),
   subject:r.class,
-  status:r.status==='P'?'Present':r.status==='A'?'Absent':'Leave'
+  status:r.status==='P'?'Present':r.status==='A'?'Absent':'Leave',
+  method:r.mode||'Manual'
 }));
 const d={
   ...data,
@@ -369,7 +382,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
         <div className="sb-footer">
           <div className="sb-user">
             <div className="sb-av" style={{background:'rgba(36,113,163,0.35)'}}>{(user.name||d.name)[0]}</div>
-            <div><div className="sb-uname">{user.name||d.name}</div><div className="sb-urole">{d.section}</div></div>
+            <div><div className="sb-uname">{user.name||d.name}</div><div className="sb-urole">{studentSection}</div></div>
           </div>
           <button className="logout-btn" onClick={onLogout}><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" width="12" height="12"><path d="M5 2H2v8h3"/><polyline points="8,4 11,6 8,8"/><line x1="5" y1="6" x2="11" y2="6"/></svg>Sign out</button>
         </div>
@@ -498,9 +511,8 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                       <div style={{fontSize:9,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:6}}>Punjab Group of Colleges · Lalamusa</div>
                       <div style={{fontSize:18,fontWeight:800,color:'#fff',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{studentName}</div>
                       <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:2}}>Roll No: <span style={{color:'#90cdf4',fontWeight:700}}>{studentId}</span></div>
-                      <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:2}}>Section: <span style={{color:'var(--white2)',fontWeight:500}}>{d.section}</span></div>
-                      <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:14}}>Program: <span style={{color:'var(--white2)',fontWeight:500}}>FSc Pre-Engineering</span></div>
-
+                      <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:2}}>Section: <span style={{color:'var(--white2)',fontWeight:500}}>{studentSection}</span></div>
+                      <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:14}}>Program: <span style={{color:'var(--white2)',fontWeight:500}}>{studentProgram}</span></div>
                       <div style={{background:'rgba(29,131,72,0.1)',border:'1px solid rgba(29,131,72,0.25)',borderRadius:10,padding:'10px 14px',fontSize:10.5,color:'rgba(255,255,255,0.5)',lineHeight:1.8}}>
                         <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
                           <span style={{width:7,height:7,borderRadius:'50%',background:'#4ade80',display:'inline-block',boxShadow:'0 0 8px #4ade80'}}></span>
@@ -566,7 +578,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                         <div style={{textAlign:'center',fontSize:11,color:'#1e3a5f',marginTop:10,fontWeight:700,letterSpacing:'0.05em'}}>{studentId}</div>
                       </div>
                       <div style={{color:'#fff',fontSize:18,fontWeight:700,marginBottom:4}}>{studentName}</div>
-                      <div style={{color:'rgba(255,255,255,0.4)',fontSize:12,marginBottom:4}}>{d.section}</div>
+                      <div style={{color:'rgba(255,255,255,0.4)',fontSize:12,marginBottom:4}}>{studentClass}</div>
                       <div style={{color:'rgba(255,255,255,0.3)',fontSize:11,marginBottom:24}}>Show this QR code to your teacher for attendance</div>
                       <button onClick={()=>setShowFullQR(false)} style={{padding:'10px 28px',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:10,color:'rgba(255,255,255,0.7)',fontSize:13,cursor:'pointer'}}>Close ✕</button>
                     </div>

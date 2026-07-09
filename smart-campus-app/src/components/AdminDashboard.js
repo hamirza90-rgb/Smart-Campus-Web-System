@@ -1,7 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { initMockData, getGradeColor, getStatusColor } from '../mockData';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PGCLogo, Toast } from './homepage';
-import { getStudents, addStudent, getTeachers, addTeacher } from '../api';
 
 const API = 'http://localhost:5000/api';
 
@@ -75,7 +73,6 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
         if(!grouped[entry.class]) grouped[entry.class]=[];
         let row=grouped[entry.class].find(r=>r.time===entry.time);
         const dayMap={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat'};
-        const reverseDayMap={Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday'};
         const shortDay=dayMap[entry.day]||entry.day;
         if(!row){
           row={time:entry.time,Mon:'',Tue:'',Wed:'',Thu:'',Fri:''};
@@ -86,8 +83,7 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
       setClassTimetables(grouped);
     }
   }).catch(()=>{});
-},[]);
-  const ttEntries=(classTimetables&&classTimetables[ttClass])||[];
+},[setClassTimetables]);
   const setTtEntries=(updater)=>{
     setClassTimetables(prev=>{
       const cur=(prev&&prev[ttClass])||[];
@@ -119,7 +115,7 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   apiCall('/announcements').then(data=>{
     if(Array.isArray(data)) setAnns(data.map(a=>({...a,id:a._id,time:a.scheduled&&a.schedDate?`Scheduled: ${a.schedDate}`:'Just now',color:'#C0392B'})));
   }).catch(()=>{});
-},[]);
+},[setAnns]);
   const [aTitle,setATitle]=useState('');
   const [aMsg,setAMsg]=useState('');
   const [aAud,setAAud]=useState('All Students & Teachers');
@@ -166,7 +162,6 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   const totalVisits=Object.values(paneVisits).reduce((a,b)=>a+b,0)||1;
   const modUsagePct=(k)=>Math.min(99,Math.round((paneVisits[k]/totalVisits)*100)||Math.round({Attendance:87,Assignments:72,Results:45,Notifications:93}[k]));
 
-  const d=initMockData.admin;
   const showToast=(msg)=>{ setToast(msg); setTimeout(()=>setToast(null),3000); };
 
   const filteredStudents=allStudents.filter(s=>
@@ -188,6 +183,7 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
           email:newUser.email,
           roll:newUser.roll||`FSc-A-0${Math.floor(Math.random()*90+10)}`,
           dept:newUser.dept||'FSc Pre-Eng',
+          section:newUser.section||'',
           phone:newUser.phone||'',
           password:initPw
         });
@@ -448,6 +444,7 @@ const sendAnn=async(scheduled=false)=>{
                   </div>
                   <div className="form-row">
   <div className="f-group"><div className="f-lab">Class / Dept</div><input className="f-inp" style={{width:'100%'}} value={editingUser.data.dept||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,dept:e.target.value}}))}/></div>
+  <div className="f-group"><div className="f-lab">Section</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. Sec B" value={editingUser.data.section||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,section:e.target.value}}))}/></div>
 </div>
 <div className="form-row">
   <div className="f-group"><div className="f-lab">Father's Name</div><input className="f-inp" style={{width:'100%'}} placeholder="Father's full name" value={editingUser.data.fatherName||''} onChange={e=>setEditingUser(p=>({...p,data:{...p.data,fatherName:e.target.value}}))}/></div>
@@ -486,6 +483,8 @@ const sendAnn=async(scheduled=false)=>{
               <div className="form-row">
                 <div className="f-group"><div className="f-lab">Role</div><select className="d-select" style={{marginBottom:0}} value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}><option>Student</option><option>Teacher</option></select></div>
                 <div className="f-group"><div className="f-lab">Class / Department</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. ICS Sec A, Mathematics..." value={newUser.dept} onChange={e=>setNewUser({...newUser,dept:e.target.value})}/></div>
+                {newUser.role==='Student'&&(
+  <div className="f-group"><div className="f-lab">Section</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. Sec B" value={newUser.section||''} onChange={e=>setNewUser({...newUser,section:e.target.value})}/></div>  )}
               </div>
               {newUser.role==='Student'&&(
                 <div className="f-group"><div className="f-lab">Roll Number</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. FSc-A-041" value={newUser.roll||''} onChange={e=>setNewUser({...newUser,roll:e.target.value})}/></div>
@@ -930,15 +929,16 @@ const sendAnn=async(scheduled=false)=>{
               const [newAC,setNewAC]=useState({name:'',teacher:'',class:'',chapters:'',chapDone:'',status:'Active'});
               const [editAC,setEditAC]=useState(null);
               const saveAC=async()=>{
-                if(!newAC.name||!newAC.class){showToast('Fill Course Name and Class');return;}
-                const payload={
-                  name:newAC.name,
-                  teacher:newAC.teacher,
-                  class:newAC.class,
-                  chapters:parseInt(newAC.chapters)||0,
-                  chapDone:parseInt(newAC.chapDone)||0,
-                  status:newAC.status
-                };
+  if(!newAC.name||!newAC.class){showToast('Fill Course Name and Class');return;}
+  const payload={
+    name:newAC.name,
+    teacher:newAC.teacher,
+    teacherId:newAC.teacherId||null,
+    class:newAC.class,
+    chapters:parseInt(newAC.chapters)||0,
+    chapDone:parseInt(newAC.chapDone)||0,
+    status:newAC.status
+  };
                 try{
                   if(editAC){
                     const updated=await apiCall(`/courses/${editAC.id}`,'PUT',payload);
@@ -966,8 +966,9 @@ const sendAnn=async(scheduled=false)=>{
                 }
               };
               return(<>
-                <div className="tab-row">{[['list','📚 Courses'],['add',editAC?'✏️ Edit':'➕ Add']].map(([t,l])=><button key={t} className={`tab-btn ${adminCourseTab===t?'active':''}`} onClick={()=>{setAdminCourseTab(t);if(t!=='add')setEditAC(null);}}>{l}</button>)}</div>
-                {adminCourseTab==='list'&&(
+  <div className="tab-row">{[['list','📚 Courses'],['add',editAC?'✏️ Edit':'➕ Add']].map(([t,l])=><button key={t} className={`tab-btn ${adminCourseTab===t?'active':''}`} onClick={()=>{setAdminCourseTab(t);if(t!=='add')setEditAC(null);}}>{l}</button>)}</div>
+  {adminCourseTab==='list'&&loadingCourses&&<div style={{textAlign:'center',padding:'20px 0',color:'rgba(255,255,255,0.3)',fontSize:12}}>Loading courses from database...</div>}
+  {adminCourseTab==='list'&&!loadingCourses&&(
                   <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>All Courses
                     <button className="add-btn" style={{marginLeft:'auto'}} onClick={()=>{setEditAC(null);setAdminCourseTab('add');}}>+ Add</button>
                   </div>
@@ -987,13 +988,17 @@ const sendAnn=async(scheduled=false)=>{
                 {adminCourseTab==='add'&&(
                   <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>{editAC?'✏️ Edit Course':'➕ Add Course'}</div>
                     <div className="form-row">
-                      <div className="f-group"><div className="f-lab">Course Name *</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. Mathematics" value={newAC.name} onChange={e=>setNewAC({...newAC,name:e.target.value})}/></div>
+                      <div className="f-group"><div className="f-lab">Course Name *</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. Mathematics" value={newAC.name} onChange={e=>setNewAC({...newAC,name:e.target.value})}/></div>                        
                       <div className="f-group"><div className="f-lab">Assign Teacher</div>
-                        <select className="d-select" style={{marginBottom:0}} value={newAC.teacher} onChange={e=>setNewAC({...newAC,teacher:e.target.value})}>
-                          <option value="">— Select Teacher —</option>
-                          {allTeachers.map(t=><option key={t._id}>{t.name}</option>)}
-                        </select>
-                      </div>
+  <select className="d-select" style={{marginBottom:0}} value={newAC.teacherId||''} onChange={e=>{
+    const selectedId=e.target.value;
+    const selectedTeacher=allTeachers.find(t=>t._id===selectedId);
+    setNewAC({...newAC,teacherId:selectedId,teacher:selectedTeacher?selectedTeacher.name:''});
+  }}>
+    <option value="">— Select Teacher —</option>
+    {allTeachers.map(t=><option key={t._id} value={t._id}>{t.name}</option>)}
+  </select>
+</div>
                     </div>
                     <div className="form-row">
                       <div className="f-group"><div className="f-lab">Class *</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. FSc Pre-Eng Sec A" value={newAC.class} onChange={e=>setNewAC({...newAC,class:e.target.value})}/></div>

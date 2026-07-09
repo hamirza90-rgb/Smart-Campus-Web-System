@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const courseSchema = new mongoose.Schema({
   name: { type: String, required: true },
   teacher: { type: String },
+  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
   class: { type: String, required: true },
   chapters: { type: Number, default: 0 },
   chapDone: { type: Number, default: 0 },

@@ -8,7 +8,8 @@ exports.markAttendance = async (req, res) => {
       rollNo: r.rollNo,
       status: r.status,
       class: className,
-      date: date
+      date: date,
+      mode: r.mode || 'Manual'
     }));
     await Attendance.insertMany(attendanceDocs);
     res.status(201).json({ message: 'Attendance saved successfully', count: attendanceDocs.length });

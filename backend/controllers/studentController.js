@@ -13,7 +13,7 @@ exports.getAllStudents = async (req, res) => {
 // Add new student
 exports.addStudent = async (req, res) => {
   try {
-    const { name, email, roll, dept, phone, attend, marks, grade, password } = req.body;
+    const { name, email, roll, dept, section, phone, attend, marks, grade, password } = req.body;
     const existing = await Student.findOne({ roll });
     if (existing) return res.status(400).json({ message: 'Student with this roll already exists' });
     const student = await Student.create({
@@ -21,6 +21,7 @@ exports.addStudent = async (req, res) => {
       email: email || `${roll.toLowerCase()}@pgc.edu.pk`,
       roll,
       dept,
+      section,
       phone,
       password: password || `${name.split(' ')[0]}@PGC2026`,
       attend: attend || 100,
@@ -36,8 +37,8 @@ exports.addStudent = async (req, res) => {
 // Update student
 exports.updateStudent = async (req, res) => {
   try {
-    const { name, email, roll, dept, phone, password, status, marks, attend, grade, fatherName } = req.body;
-    const updateData = { name, email, roll, dept, phone, status, marks, attend, grade, fatherName };
+    const { name, email, roll, dept, section, phone, password, status, marks, attend, grade, fatherName } = req.body;
+    const updateData = { name, email, roll, dept, section, phone, status, marks, attend, grade, fatherName };
     if (password && password.trim() !== '') updateData.password = password;
     const student = await Student.findByIdAndUpdate(
       req.params.id,
@@ -78,7 +79,8 @@ exports.loginStudent = async (req, res) => {
       name: student.name,
       email: student.email,
       roll: student.roll,
-      dept: student.dept
+      dept: student.dept,
+      section: student.section
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });

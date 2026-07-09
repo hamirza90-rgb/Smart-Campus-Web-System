@@ -6,9 +6,14 @@ import { PGCLogo, Toast } from './homepage';
 function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,teacherNotifs,setTeacherNotifs}){
   const [activePane,setActivePane]=useState('t-home');
   const [toast,setToast]=useState(null);
-  const [attClass,setAttClass]=useState('FSc Pre-Eng Sec B');
+  const [attClass,setAttClass]=useState('');
+  const getLocalDateStr=()=>{
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
   const [attData]=useState({});
   const [students,setStudents]=useState(initMockData.teacher.students);
+  const classStudents = students.filter(s => s.dept === attClass);
   const [realCourses, setRealCourses] = useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
@@ -17,10 +22,14 @@ useEffect(()=>{
   })
     .then(res => res.json())
     .then(data => {
-      if (Array.isArray(data)) setRealCourses(data);
+      if (Array.isArray(data)) {
+        const myCourses = data.filter(c => c.teacherId === user.id);
+        setRealCourses(myCourses);
+      }
     })
     .catch(() => {});
-}, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [user.name]);
 const [homeAttendance, setHomeAttendance] = useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
@@ -66,17 +75,7 @@ const topStudentsWithMarks = students.map(s => {
 }).sort((a,b) => b.marks - a.marks);
 const [homeAssignments, setHomeAssignments] = useState([]);
 useEffect(()=>{
-  const token = localStorage.getItem('token');
-  fetch('http://localhost:5000/api/assignments', {
-    headers: { 'Authorization': `Bearer ${token}` }
-  })
-    .then(res => res.json())
-    .then(data => {
-      if (Array.isArray(data)) setHomeAssignments(data);
-    })
-    .catch(() => {});
-}, []);
-  useEffect(()=>{
+  if(realCourses.length===0) return;
   const token = localStorage.getItem('token');
   fetch('http://localhost:5000/api/students', {
     headers: { 'Authorization': `Bearer ${token}` }
@@ -84,7 +83,9 @@ useEffect(()=>{
     .then(res => res.json())
     .then(data => {
       if (Array.isArray(data) && data.length > 0) {
-        setStudents(data.map(s => ({
+        const myClassNames = [...new Set(realCourses.map(c=>c.class))];
+        const myStudents = data.filter(s => myClassNames.includes(s.dept));
+        setStudents(myStudents.map(s => ({
           _id: s._id,
           name: s.name,
           roll: s.roll,
@@ -96,7 +97,8 @@ useEffect(()=>{
       }
     })
     .catch(() => {});
-}, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [realCourses]);
   const [searchTerm,setSearchTerm]=useState('');
   const [showAddStudent,setShowAddStudent]=useState(false);
   const [newStudent,setNewStudent]=useState({name:'',roll:'',attend:100,marks:0,grade:'A'});
@@ -105,18 +107,24 @@ useEffect(()=>{
   const [activeScanStudent,setActiveScanStudent]=useState(null);
   const [realScannerOpen,setRealScannerOpen]=useState(false);
   const [camError,setCamError]=useState(false);
-  const [myClasses,setMyClasses]=useState(d.classes);
+  const [myClasses,setMyClasses]=useState([]);
+useEffect(()=>{
+  if(myClasses.length>0){
+    setAttClass(myClasses[0].name);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+},[myClasses]);
   useEffect(()=>{
   if(realCourses.length>0){
     const uniqueClasses=[...new Set(realCourses.map(c=>c.class))];
-    console.log('DEBUG realCourses:', realCourses);
-    console.log('DEBUG students:', students);
-    console.log('DEBUG uniqueClasses:', uniqueClasses);
-    setMyClasses(uniqueClasses.map(cls=>({
-      name: cls,
-      subject: realCourses.find(c=>c.class===cls)?.name||'',
-      students: students.filter(s=>s.dept===cls).length
-    })));
+    setMyClasses(uniqueClasses.map(cls=>{
+      const subjectsForClass=realCourses.filter(c=>c.class===cls).map(c=>c.name);
+      return {
+        name: cls,
+        subject: subjectsForClass.join(', '),
+        students: students.filter(s=>s.dept===cls).length
+      };
+    }));
   }
 },[realCourses, students]);
   const [attSaved,setAttSaved]=useState([]);
@@ -326,7 +334,7 @@ const deleteStudent=async(id)=>{
               const [attMode,setAttMode]=useState('qr'); // qr | manual
               const [scannedNames,setScannedNames]=useState([]); // students marked present via QR
               const [manualData,setManualData]=useState({});
-              const [attDate,setAttDate]=useState(new Date().toISOString().split('T')[0]);
+              const [attDate,setAttDate]=useState(getLocalDateStr());
               const [scanAnim]=useState(false);
               const [lastScanned,setLastScanned]=useState(null);
               const [savedSessions,setSavedSessions]=useState(attSaved);
@@ -341,10 +349,9 @@ const deleteStudent=async(id)=>{
                 };
                 openRealScanner(student,scannedNames);
               };
-
-              const remainingStudents=students.filter(s=>!scannedNames.includes(s.name));
-              const filtStu=students.filter(s=>s.name.toLowerCase().includes(stuSearch.toLowerCase())||s.roll.toLowerCase().includes(stuSearch.toLowerCase()));
-
+const remainingStudents=classStudents.filter(s=>!scannedNames.includes(s.name));
+const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.toLowerCase())||s.roll.toLowerCase().includes(stuSearch.toLowerCase()));
+              
               const submitAttendance = async () => {
   const date = new Date(attDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
   const newSession = {
@@ -359,12 +366,13 @@ const deleteStudent=async(id)=>{
   try {
     const token = localStorage.getItem('token');
     const records = students.map(s => ({
-      studentName: s.name,
-      rollNo: s.roll,
-      status: attMode==='qr'
-        ? (scannedNames.includes(s.name) ? 'P' : 'A')
-        : (manualData[s.name] || 'A')
-    }));
+    studentName: s.name,
+    rollNo: s.roll,
+    status: attMode==='qr'
+    ? (scannedNames.includes(s.name) ? 'P' : 'A')
+    : (manualData[s.name] || 'A'),
+  mode: attMode==='qr' && scannedNames.includes(s.name) ? 'QR Scan' : 'Manual'
+}));
 
     const res = await fetch('http://localhost:5000/api/attendance', {
       method: 'POST',
@@ -531,7 +539,7 @@ const deleteStudent=async(id)=>{
                           <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8}}>
                             <div style={{background:'rgba(255,255,255,0.06)',border:'1px dashed rgba(255,255,255,0.15)',borderRadius:8,padding:'14px 20px',display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
                               <div style={{fontSize:24}}>📱</div>
-                              <div style={{color:'rgba(255,255,255,0.4)',fontSize:10,textAlign:'center',lineHeight:1.5}}>Student apna QR card<br/>camera ke saamne rakhe</div>
+                              <div style={{color:'rgba(255,255,255,0.4)',fontSize:10,textAlign:'center',lineHeight:1.5}}>Show student's QR card<br/>in front of the camera</div>
                             </div>
                           </div>
                         )}
@@ -561,9 +569,9 @@ const deleteStudent=async(id)=>{
                       {/* Instructions */}
                       <div style={{background:'rgba(36,113,163,0.07)',border:'1px solid rgba(36,113,163,0.15)',borderRadius:8,padding:'8px 12px',fontSize:10,color:'rgba(255,255,255,0.4)',lineHeight:1.8}}>
                         <div style={{fontWeight:700,color:'#60a5fa',marginBottom:4}}>📋 How to scan:</div>
-                        <div>1. Student apna QR card screen pe dikhaye 📱</div>
-                        <div>2. Right side mein student ka naam click karein 👇</div>
-                        <div>3. Scanner automatically detect karke mark karega ✅</div>
+                        <div>1. Student shows their QR card on screen 📱</div>
+                        <div>2. Click the student's name on the right 👇</div>
+                        <div>3. Scanner will automatically detect and mark ✅</div>
                       </div>
                     </div>
 
@@ -572,11 +580,11 @@ const deleteStudent=async(id)=>{
                       {/* Students to scan — ALL shown, scanned ones get ✓ tick */}
                       <div className="card" style={{flex:1}}>
                         <div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>
-                          📋 Students ({scannedNames.length}/{students.length} ✅)
-                        </div>
-                        <div style={{fontSize:10,color:'rgba(255,255,255,0.3)',marginBottom:8,fontStyle:'italic'}}>Student ka QR scanner ke saamne ho to neeche naam par click karein — auto mark hoga</div>
+  📋 Students ({scannedNames.length}/{classStudents.length} ✅)
+</div>
+<div style={{fontSize:10,color:'rgba(255,255,255,0.3)',marginBottom:8,fontStyle:'italic'}}>Click a student's name below when their QR is in front of the camera — it will mark automatically</div>
                         <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:320,overflowY:'auto'}}>
-                          {students.map(s=>{
+                            {classStudents.map(s=>{
                             const isScanned=scannedNames.includes(s.name);
                             const isScanning=scanAnim&&lastScanned?.name===s.name;
                             return(
@@ -617,9 +625,9 @@ const deleteStudent=async(id)=>{
                             </div>
                             );
                           })}
-                          {scannedNames.length===students.length&&(
+                          {classStudents.length>0 && scannedNames.length===classStudents.length&&(
                             <div style={{textAlign:'center',padding:'14px 0',color:'#4ade80',fontSize:13,fontWeight:700}}>
-                              🎉 Sab students scan ho gaye!
+                                  🎉 All students scanned!
                             </div>
                           )}
                         </div>
@@ -2158,7 +2166,7 @@ const realAvgAtt = realAttendance.length > 0
           {/* Body */}
           <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20,gap:16}}>
             <div style={{color:'rgba(255,255,255,0.6)',fontSize:13,textAlign:'center',maxWidth:340}}>
-              📱 <strong style={{color:'#fff'}}>{activeScanStudent.name}</strong> ko apna unique QR code camera ke saamne rakhne ko bolein
+              📱 Ask <strong style={{color:'#fff'}}>{activeScanStudent.name}</strong> to hold their QR code in front of the camera
             </div>
             {/* QR Reader Container */}
             <div style={{width:'100%',maxWidth:380,background:'#000',borderRadius:16,overflow:'hidden',boxShadow:'0 0 0 2px #1D9E75,0 0 0 6px rgba(29,158,117,0.2)'}}>
