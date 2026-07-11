@@ -17,14 +17,13 @@ function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [realCourses, setRealCourses] = useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
-  fetch('http://localhost:5000/api/courses', {
+  fetch('http://localhost:5000/api/courses/my', {
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
     .then(data => {
       if (Array.isArray(data)) {
-        const myCourses = data.filter(c => c.teacherId === user.id);
-        setRealCourses(myCourses);
+        setRealCourses(data);
       }
     })
     .catch(() => {});
@@ -51,6 +50,12 @@ const homeAvgAttendance = (() => {
   const totalPresent = homeAttendance.filter(r => r.status === 'P').length;
   return Math.round((totalPresent / homeAttendance.length) * 100);
 })();
+const getStudentAttendancePct = (rollNo) => {
+  const myRecords = homeAttendance.filter(r => r.rollNo === rollNo);
+  if (myRecords.length === 0) return 100; // koi record nahi to default
+  const present = myRecords.filter(r => r.status === 'P').length;
+  return Math.round((present / myRecords.length) * 100);
+};
 const [homeResults, setHomeResults] = useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
@@ -99,6 +104,18 @@ useEffect(()=>{
     .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [realCourses]);
+// ── NAYA CODE — Dashboard assignments ke liye real data ──
+useEffect(()=>{
+  const token = localStorage.getItem('token');
+  fetch('http://localhost:5000/api/assignments/my', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) setHomeAssignments(data);
+    })
+    .catch(() => {});
+}, []);
   const [searchTerm,setSearchTerm]=useState('');
   const [showAddStudent,setShowAddStudent]=useState(false);
   const [newStudent,setNewStudent]=useState({name:'',roll:'',attend:100,marks:0,grade:'A'});
@@ -122,6 +139,7 @@ useEffect(()=>{
       return {
         name: cls,
         subject: subjectsForClass.join(', '),
+        subjects: subjectsForClass,
         students: students.filter(s=>s.dept===cls).length
       };
     }));
@@ -331,7 +349,10 @@ const deleteStudent=async(id)=>{
           <div className={`panel ${activePane==='t-attend'?'active':''}`}>
             {(()=>{
               const [attStep,setAttStep]=useState('setup'); // setup | scanning | manual | submitted
-              const [attMode,setAttMode]=useState('qr'); // qr | manual
+              const [attMode,setAttMode]=useState('qr'); 
+              const [attSubject,setAttSubject]=useState('');
+              const currentClassObj=myClasses.find(c=>c.name===attClass);
+              const currentSubjects=currentClassObj?.subjects||[];
               const [scannedNames,setScannedNames]=useState([]); // students marked present via QR
               const [manualData,setManualData]=useState({});
               const [attDate,setAttDate]=useState(getLocalDateStr());
@@ -356,16 +377,16 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
   const date = new Date(attDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
   const newSession = {
     date, class: attClass,
-    p: attMode==='qr' ? scannedNames.length : students.filter(s=>manualData[s.name]==='P').length,
-    a: attMode==='qr' ? remainingStudents.length : students.filter(s=>manualData[s.name]==='A'||!manualData[s.name]).length,
-    l: students.filter(s=>manualData[s.name]==='L').length,
+    p: attMode==='qr' ? scannedNames.length : classStudents.filter(s=>manualData[s.name]==='P').length,
+a: attMode==='qr' ? remainingStudents.length : classStudents.filter(s=>manualData[s.name]==='A'||!manualData[s.name]).length,
+l: classStudents.filter(s=>manualData[s.name]==='L').length,
     mode: attMode==='qr' ? 'QR Scan' : 'Manual'
   };
 
   // Backend pe save karo
   try {
     const token = localStorage.getItem('token');
-    const records = students.map(s => ({
+    const records = classStudents.map(s => ({
     studentName: s.name,
     rollNo: s.roll,
     status: attMode==='qr'
@@ -380,24 +401,24 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ class: attClass, date: attDate, records })
+      body: JSON.stringify({ class: attClass, subject: attSubject || currentSubjects[0] || '', date: attDate, records })
     });
 
     const data = await res.json();
     if(res.ok){
-      showToast('✅ Attendance MongoDB mein save ho gaya!');
+      showToast('✅ Attendance saved successfully!');
     } else {
       showToast('⚠️ ' + (data.message || 'Backend error'));
     }
   } catch(e) {
-    showToast('⚠️ Backend connect nahi hua');
+    showToast('⚠️ Could not connect to server.');
   }
 
   setSavedSessions(prev=>[newSession,...prev.slice(0,9)]);
   setAttSaved(prev=>[newSession,...prev.slice(0,9)]);
   setAttStep('submitted');
 };
-              const resetAtt=()=>{setAttStep('setup');setScannedNames([]);setManualData({});setLastScanned(null);setStuSearch('');};
+              const resetAtt=()=>{setAttStep('setup');setScannedNames([]);setManualData({});setLastScanned(null);setStuSearch('');setAttSubject('');};
 
               // STEP 1 — SETUP
               if(attStep==='setup') return(
@@ -410,7 +431,7 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
                     </div>
                     <div style={{display:'flex',flexWrap:'wrap',gap:10,marginTop:10}}>
                       {myClasses.map(c=>(
-                        <div key={c.name} onClick={()=>setAttClass(c.name)} style={{flex:'1 1 180px',padding:'14px 16px',borderRadius:12,cursor:'pointer',background:attClass===c.name?'rgba(29,131,72,0.18)':'rgba(255,255,255,0.04)',border:`1.5px solid ${attClass===c.name?'#1D9E75':'rgba(255,255,255,0.1)'}`,transition:'all 0.15s'}}>
+                          <div key={c.name} onClick={()=>{setAttClass(c.name);setAttSubject('');}} style={{flex:'1 1 180px',padding:'14px 16px',borderRadius:12,cursor:'pointer',background:attClass===c.name?'rgba(29,131,72,0.18)':'rgba(255,255,255,0.04)',border:`1.5px solid ${attClass===c.name?'#1D9E75':'rgba(255,255,255,0.1)'}`,transition:'all 0.15s'}}> 
                           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                             <div style={{width:32,height:32,borderRadius:8,background:attClass===c.name?'rgba(29,131,72,0.3)':'rgba(255,255,255,0.06)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>📚</div>
                             <div>
@@ -429,6 +450,18 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
                         <input type="date" className="f-inp" style={{width:'100%'}} value={attDate} onChange={e=>setAttDate(e.target.value)}/>
                       </div>
                     </div>
+                    {currentSubjects.length>1&&(
+                      <div style={{marginTop:14}}>
+                        <div className="f-lab" style={{marginBottom:6}}>Select Subject *</div>
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                          {currentSubjects.map(sub=>(
+                            <button key={sub} onClick={()=>setAttSubject(sub)} style={{padding:'8px 16px',borderRadius:8,cursor:'pointer',background:attSubject===sub?'rgba(36,113,163,0.25)':'rgba(255,255,255,0.04)',border:`1.5px solid ${attSubject===sub?'#2471A3':'rgba(255,255,255,0.1)'}`,color:attSubject===sub?'#60a5fa':'rgba(255,255,255,0.5)',fontSize:12,fontWeight:600}}>
+                              {sub}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Choose Method */}
@@ -463,7 +496,10 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
                     </div>
                   </div>
 
-                  <button onClick={()=>setAttStep(attMode==='qr'?'scanning':'manual')} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#0d2a1a,#1D9E75)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
+                  <button onClick={()=>{
+                    if(currentSubjects.length>1 && !attSubject){ showToast('Please select a subject first','⚠️'); return; }
+                    setAttStep(attMode==='qr'?'scanning':'manual');
+                  }} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#0d2a1a,#1D9E75)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
                     {attMode==='qr'?'📷 Start QR Scanning →':'✍️ Start Manual Attendance →'}
                   </button>
 
@@ -492,7 +528,7 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
                   {/* Top bar */}
                   <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14,flexWrap:'wrap'}}>                    <button onClick={resetAtt} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:11,padding:'6px 12px'}}>← Back</button>
                     <div style={{flex:1}}>
-                      <div style={{color:'#fff',fontSize:14,fontWeight:700}}>📷 QR Attendance — {attClass}</div>
+                      <div style={{color:'#fff',fontSize:14,fontWeight:700}}>📷 QR Attendance — {attClass}{attSubject?` · ${attSubject}`:''}</div>
                       <div style={{fontSize:10,color:'rgba(255,255,255,0.35)'}}>{new Date(attDate).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
                     </div>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -641,7 +677,7 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
                           ✍️ Remaining ko Manual Mark Karein
                         </button>
                         <button onClick={submitAttendance} style={{padding:'12px',background:'linear-gradient(135deg,#0d2a1a,#1D9E75)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>
-                          ✅ Submit Attendance ({scannedNames.length}/{students.length})
+                          ✅ Submit Attendance ({scannedNames.length}/{classStudents.length})
                         </button>
                       </div>
                     </div>
@@ -654,7 +690,7 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
                   <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14,flexWrap:'wrap'}}>
                     <button onClick={()=>setAttStep(attMode==='manual'?'setup':'scanning')} style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:8,color:'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:11,padding:'6px 12px'}}>← Back</button>
                     <div style={{flex:1}}>
-                      <div style={{color:'#fff',fontSize:14,fontWeight:700}}>✍️ Manual Attendance — {attClass}</div>
+                      <div style={{color:'#fff',fontSize:14,fontWeight:700}}>✍️ Manual Attendance — {attClass}{attSubject?` · ${attSubject}`:''}</div>
                       <div style={{fontSize:10,color:'rgba(255,255,255,0.35)'}}>{new Date(attDate).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}{attMode==='qr'?' · Completing remaining after QR scan':''}</div>
                     </div>
                   </div>
@@ -678,8 +714,8 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
                       <input placeholder="Search student..." value={stuSearch} onChange={e=>setStuSearch(e.target.value)}/>
                     </div>
                     <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
-                      <button className="d-btn d-btn-green" style={{fontSize:10}} onClick={()=>{const a={};(attMode==='qr'?remainingStudents:students).forEach(s=>a[s.name]='P');setManualData(prev=>({...prev,...a}));showToast('All marked Present');}}>✓ All Present</button>
-                      <button className="d-btn" style={{background:'rgba(212,172,13,0.1)',color:'#D4AC0D',border:'1px solid rgba(212,172,13,0.25)',borderRadius:5,padding:'5px 12px',fontSize:10,cursor:'pointer'}} onClick={()=>{const a={};(attMode==='qr'?remainingStudents:students).forEach(s=>a[s.name]='L');setManualData(prev=>({...prev,...a}));showToast('All marked Leave');}}>⏸ All Leave</button>
+                      <button className="d-btn d-btn-green" style={{fontSize:10}} onClick={()=>{const a={};(attMode==='qr'?remainingStudents:classStudents).forEach(s=>a[s.name]='P');setManualData(prev=>({...prev,...a}));showToast('All marked Present');}}>✓ All Present</button>
+                      <button className="d-btn" style={{background:'rgba(212,172,13,0.1)',color:'#D4AC0D',border:'1px solid rgba(212,172,13,0.25)',borderRadius:5,padding:'5px 12px',fontSize:10,cursor:'pointer'}} onClick={()=>{const a={};(attMode==='qr'?remainingStudents:classStudents).forEach(s=>a[s.name]='L');setManualData(prev=>({...prev,...a}));showToast('All marked Leave');}}>⏸ All Leave</button>
                     </div>
                     <table className="mt">
                       <thead><tr><th>Student</th><th>Roll No</th><th>Status</th><th>Mark</th></tr></thead>
@@ -729,9 +765,9 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
                   </div>
                   <div style={{display:'flex',gap:20,marginBottom:32}}>
                     {[
-                      [attMode==='qr'?scannedNames.length:students.filter(s=>manualData[s.name]==='P').length,'Present','#4ade80'],
-                      [attMode==='qr'?remainingStudents.length:students.filter(s=>manualData[s.name]==='A'||!manualData[s.name]).length,'Absent','#f87171'],
-                      [students.filter(s=>manualData[s.name]==='L').length,'Leave','#fbbf24'],
+                      [attMode==='qr'?scannedNames.length:classStudents.filter(s=>manualData[s.name]==='P').length,'Present','#4ade80'],
+[attMode==='qr'?remainingStudents.length:classStudents.filter(s=>manualData[s.name]==='A'||!manualData[s.name]).length,'Absent','#f87171'],
+[classStudents.filter(s=>manualData[s.name]==='L').length,'Leave','#fbbf24'],
                     ].map(([v,l,c])=>(
                       <div key={l} style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'14px 24px',textAlign:'center'}}>
                         <div style={{fontSize:26,fontWeight:700,color:c}}>{v}</div>
@@ -761,7 +797,7 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
               const [tAssignments,setTAssignments]=useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
-  fetch('http://localhost:5000/api/assignments', {
+  fetch('http://localhost:5000/api/assignments/my', {
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
@@ -783,11 +819,11 @@ useEffect(()=>{
     .catch(() => {});
 }, []);
               const [editingAssign,setEditingAssign]=useState(null);
-              const [newAssign,setNewAssign]=useState({subject:'Mathematics',cls:'',topic:'',instructions:'',dueDate:'',assignedTo:'Class',totalMarks:25,file:null});
+              const [newAssign,setNewAssign]=useState({subject:'',cls:'',topic:'',instructions:'',dueDate:'',totalMarks:25,file:null});
               const [submissions,setSubmissions]=useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
-  fetch('http://localhost:5000/api/assignments', {
+  fetch('http://localhost:5000/api/assignments/my', {
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
@@ -804,7 +840,8 @@ useEffect(()=>{
               subject: a.subject,
               submittedOn: s.submittedAt ? new Date(s.submittedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '',
               pastedContent: s.fileUrl || '',
-              file: '',
+              filePath: s.filePath || '',
+              file: s.fileName || '',
               status: s.status || 'Pending',
               marks: s.marks || '',
               feedback: s.feedback || '',
@@ -824,19 +861,46 @@ useEffect(()=>{
               const [viewingSubmission,setViewingSubmission]=useState(null);
               const [pdfViewLocation,setPdfViewLocation]=useState(null);
 
-              const tSubjects=['Mathematics','Physics','Chemistry','English','Biology','Computer','Urdu','Islamic Studies','Pak Studies'];
-
               const addOrUpdateAssign=()=>{
   if(!newAssign.topic.trim()||!newAssign.dueDate){ showToast('Fill topic and due date','⚠️ '); return; }
   const token = localStorage.getItem('token');
   if(editingAssign){
-    fetch(`http://localhost:5000/api/assignments/${editingAssign.id}/status`, {
+    fetch(`http://localhost:5000/api/assignments/${editingAssign.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ status: newAssign.status || 'Active' })
-    }).catch(() => {});
-    setTAssignments(prev=>prev.map(a=>a.id===editingAssign.id?{...a,...newAssign}:a));
-    showToast('Assignment updated!'); setEditingAssign(null);
+      body: JSON.stringify({
+        title: newAssign.topic,
+        description: newAssign.instructions,
+        subject: newAssign.subject,
+        class: newAssign.cls,
+        dueDate: newAssign.dueDate,
+        totalMarks: newAssign.totalMarks,
+        status: newAssign.status || 'Active'
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if(data.assignment || data._id){
+          const updated = data.assignment || data;
+          setTAssignments(prev=>prev.map(a=>a.id===editingAssign.id?{
+            ...a,
+            subject: updated.subject,
+            cls: updated.class,
+            topic: updated.title,
+            instructions: updated.description,
+            dueDate: updated.dueDate,
+            totalMarks: updated.totalMarks,
+            status: updated.status
+          }:a));
+          showToast('✅ Assignment updated in database!');
+        } else {
+          showToast('⚠️ Update failed');
+        }
+      })
+      .catch(() => {
+        showToast('⚠️ Backend connect nahi hua');
+      });
+    setEditingAssign(null);
   } else {
     fetch('http://localhost:5000/api/assignments', {
       method: 'POST',
@@ -846,7 +910,6 @@ useEffect(()=>{
   description: newAssign.instructions,
   subject: newAssign.subject,
   class: newAssign.cls,
-  teacher: (user.teacher && user.teacher._id) ? user.teacher._id : (user._id || user.id || '6a40f5d8162dc57952197746'),
   dueDate: newAssign.dueDate,
   totalMarks: newAssign.totalMarks
 })
@@ -865,12 +928,16 @@ useEffect(()=>{
             status: data.assignment.status,
             totalMarks: data.assignment.totalMarks
           }]);
+          showToast('✅ Assignment created and assigned!');
+        } else {
+          showToast('⚠️ ' + (data.message || 'Failed to create assignment'), '⚠️');
         }
       })
-      .catch(() => {});
-    showToast('Assignment created and assigned!');
+      .catch(() => {
+        showToast('⚠️ Backend connect nahi hua', '⚠️');
+      });
   }
-  setNewAssign({subject:'Mathematics',cls:'',topic:'',instructions:'',dueDate:'',assignedTo:'Class',totalMarks:25,file:null});
+  setNewAssign({subject:'',cls:'',topic:'',instructions:'',dueDate:'',totalMarks:25,file:null});
   setTAssignTab('list');
 };
               const deleteAssign=(id)=>{
@@ -913,14 +980,18 @@ const startEdit=(a)=>{
   setTempMarks(''); setTempFeedback('');
   showToast('✅ Grade and feedback saved successfully!');
 };
-              const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,location:'Teacher Assignment Review Panel > Submissions Tab'}); setViewingSubmission(s); };
-              const handleDownload=(file,content)=>{
-  const text = content || `No content available for: ${file||'this submission'}`;
+const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,filePath:s.filePath,location:'Teacher Assignment Review Panel > Submissions Tab'}); setViewingSubmission(s); };
+              const handleDownload=(s)=>{
+  if(s.filePath){
+    window.open(`http://localhost:5000/uploads/${s.filePath}`, '_blank');
+    return;
+  }
+  const text = s.pastedContent || `No content available for: ${s.file||'this submission'}`;
   const blob = new Blob([text],{type:'text/plain'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = (file||'submission').replace(/[^\w.-]/g,'_')+'.txt';
+  a.download = (s.file||'submission').replace(/[^\w.-]/g,'_')+'.txt';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast('✅ Downloaded');
@@ -930,13 +1001,13 @@ const startEdit=(a)=>{
                 <div className="tab-row">{[['list','📋 Assignments'],['create',editingAssign?'✏️ Edit':'➕ Create New'],['submissions','📥 Submissions'],['grade','⭐ Grade']].map(([t,l])=><button key={t} className={`tab-btn ${tAssignTab===t?'active':''}`} onClick={()=>{setTAssignTab(t);if(t!=='create')setEditingAssign(null);}}>{l}</button>)}</div>
 
                 {tAssignTab==='list'&&(<>
-                  <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>All Assignments ({tAssignments.length}) <button className="add-btn" style={{marginLeft:'auto'}} onClick={()=>{setEditingAssign(null);setNewAssign({subject:'Mathematics',cls:'',topic:'',instructions:'',dueDate:'',assignedTo:'Class',totalMarks:25,file:null});setTAssignTab('create');}}>+ Create New</button></div>
-                    <table className="mt"><thead><tr><th>Subject</th><th>Class</th><th>Topic</th><th>Due Date</th><th>Assigned To</th><th>Marks</th><th>Status</th><th>Actions</th></tr></thead>
-                    <tbody>{tAssignments.map(a=>(
-                      <tr key={a.id}>
-                        <td>{a.subject}</td><td style={{fontSize:10}}>{a.cls}</td><td style={{maxWidth:120,fontSize:11}}>{a.topic}</td>
-                        <td style={{fontSize:10}}>{a.dueDate}</td><td style={{fontSize:10}}>{a.assignedTo}</td>
-                        <td>/{a.totalMarks}</td>
+                  <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>All Assignments ({tAssignments.length}) <button className="add-btn" style={{marginLeft:'auto'}} onClick={()=>{setEditingAssign(null);setNewAssign({subject:'',cls:'',topic:'',instructions:'',dueDate:'',totalMarks:25,file:null});setTAssignTab('create');}}>+ Create New</button></div>
+                    <table className="mt"><thead><tr><th>Subject</th><th>Class</th><th>Topic</th><th>Due Date</th><th>Marks</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>{tAssignments.map(a=>(
+  <tr key={a.id}>
+    <td>{a.subject}</td><td style={{fontSize:10}}>{a.cls}</td><td style={{maxWidth:120,fontSize:11}}>{a.topic}</td>
+    <td style={{fontSize:10}}>{a.dueDate}</td>
+    <td>/{a.totalMarks}</td>
                         <td><span className={`badge ${a.status==='Active'?'bg':'bb'}`}>{a.status}</span></td>
                         <td style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                           <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>startEdit(a)}>✎ Edit</button>
@@ -951,23 +1022,14 @@ const startEdit=(a)=>{
                   <div className="card">
                     <div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>{editingAssign?'✏️ Edit Assignment':'➕ Create New Assignment'}</div>
                     <div className="form-row">
-                      <div className="f-group"><div className="f-lab">Subject *</div>
-                        <select className="d-select" style={{marginBottom:0}} value={newAssign.subject} onChange={e=>setNewAssign({...newAssign,subject:e.target.value})}>
-                          {tSubjects.map(s=><option key={s}>{s}</option>)}
-                        </select>
-                      </div>
-                      <div className="f-group"><div className="f-lab">Assign To Class *</div>
-                        <select className="d-select" style={{marginBottom:0}} value={newAssign.cls} onChange={e=>setNewAssign({...newAssign,cls:e.target.value})}>
-                          <option value="">— Select Class —</option>
-                          {myClasses.map(c=><option key={c.name}>{c.name}</option>)}
-                        </select>
-                      </div>
-                      <div className="f-group"><div className="f-lab">Assign To</div>
-                        <select className="d-select" style={{marginBottom:0}} value={newAssign.assignedTo} onChange={e=>setNewAssign({...newAssign,assignedTo:e.target.value})}>
-                          <option>Class</option><option>Group A</option><option>Group B</option><option>Individual</option>
-                        </select>
-                      </div>
-                    </div>
+  <div className="f-group"><div className="f-lab">Subject *</div>
+    <input className="f-inp" style={{width:'100%'}} placeholder="e.g. Mathematics" value={newAssign.subject} onChange={e=>setNewAssign({...newAssign,subject:e.target.value})}/>
+  </div>
+  <div className="f-group"><div className="f-lab">Assign To Class *</div>
+    <input className="f-inp" style={{width:'100%'}} placeholder="e.g. FA" value={newAssign.cls} onChange={e=>setNewAssign({...newAssign,cls:e.target.value})} list="assign-class-list"/>
+    <datalist id="assign-class-list">{myClasses.map(c=><option key={c.name} value={c.name}/>)}</datalist>
+  </div>
+</div>
                     <div className="f-group"><div className="f-lab">Topic / Title *</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. Chapter 5 — Polynomials" value={newAssign.topic} onChange={e=>setNewAssign({...newAssign,topic:e.target.value})}/></div>
                     <div className="f-group"><div className="f-lab">Instructions</div><textarea className="f-inp" style={{width:'100%',minHeight:70,resize:'vertical'}} placeholder="e.g. Complete all exercises. Show working." value={newAssign.instructions} onChange={e=>setNewAssign({...newAssign,instructions:e.target.value})}/></div>
                     <div className="form-row">
@@ -1005,9 +1067,9 @@ const startEdit=(a)=>{
                         </div>
                         {/* PDF Content Area */}
                         <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
-                          {viewingSubmission.uploadedFile ? (
+                          {pdfViewLocation.filePath ? (
                             <iframe
-                              src={URL.createObjectURL(viewingSubmission.uploadedFile)}
+                              src={`http://localhost:5000/uploads/${pdfViewLocation.filePath}`}
                               style={{width:'100%',height:'500px',border:'none',borderRadius:8,background:'#fff'}}
                               title="PDF Preview"
                             />
@@ -1041,8 +1103,8 @@ const startEdit=(a)=>{
                         <td><span className={`badge ${s.status==='Checked'?'bg':'bb'}`}>{s.status}</span></td>
                         <td style={{display:'flex',gap:3,flexWrap:'wrap'}}>
                           <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>openPdfView(s)}>👁 View PDF</button>
-                          <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>handleDownload(s.file,s.pastedContent)}>⬇</button>
                           <button className="d-btn" style={{background:'rgba(212,172,13,0.12)',color:'#D4AC0D',border:'1px solid rgba(212,172,13,0.25)',borderRadius:5,padding:'2px 7px',fontSize:'9px',cursor:'pointer'}} onClick={()=>{setGradingId(s.id);setTempMarks(s.marks||'');setTempFeedback(s.feedback||'');setTAssignTab('grade');}}>⭐ Grade</button>
+                          <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>handleDownload(s)}>⬇</button>
                         </td>
                       </tr>
                     ))}</tbody></table>
@@ -1070,10 +1132,15 @@ const startEdit=(a)=>{
                             />
                             <span style={{color:'rgba(255,255,255,0.3)',fontSize:12}}>/{tAssignments.find(a=>a.topic===s.assignment)?.totalMarks||25}</span>
                           </div>
-                          <select className="d-select" style={{width:80,marginBottom:0,fontSize:11}} onChange={e=>{if(gradingId===s.id)setTempFeedback(e.target.value+' '+tempFeedback);}} onFocus={()=>{if(gradingId!==s.id){setGradingId(s.id);setTempMarks(s.marks||'');setTempFeedback(s.feedback||'');}}}>
-                            <option value="">Grade →</option>
-                            {['A+','A','B+','B','C','D','F'].map(g=><option key={g} value={g}>{g}</option>)}
-                          </select>
+                          <span style={{padding:'6px 10px',borderRadius:6,background:'rgba(212,172,13,0.12)',border:'1px solid rgba(212,172,13,0.25)',color:'#D4AC0D',fontSize:11,fontWeight:700,minWidth:36,textAlign:'center'}}>
+                            {(()=>{
+                              const m=Number(gradingId===s.id?tempMarks:s.marks)||0;
+                              const t=tAssignments.find(a=>a.topic===s.assignment)?.totalMarks||25;
+                              const p=t>0?(m/t*100):0;
+                              if(!m) return '—';
+                              if(p>=90)return'A+'; if(p>=80)return'A'; if(p>=70)return'B+'; if(p>=60)return'B'; if(p>=50)return'C'; if(p>=40)return'D'; return'F';
+                            })()}
+                          </span>
                           <input className="f-inp" style={{flex:1,minWidth:140}} placeholder="Feedback for student..."
                             value={gradingId===s.id?tempFeedback:s.feedback}
                             onChange={e=>{if(gradingId===s.id)setTempFeedback(e.target.value);}}
@@ -1294,18 +1361,10 @@ const startEdit=(a)=>{
                   <select className="d-select" style={{marginBottom:0,fontSize:11,minWidth:200}} value={attClass} onChange={e=>setAttClass(e.target.value)}>
                     {myClasses.map(c=><option key={c.name} value={c.name}>{c.name} — {c.subject} ({c.students} students)</option>)}
                   </select>
-                  <button className="add-btn" onClick={()=>setShowAddStudent(!showAddStudent)}>+ Add Student</button>
                 </div>
 
-                {/* Add student form */}
-                {showAddStudent&&(<div className="mini-form" style={{marginBottom:12}}>
-                  <div style={{color:'var(--white2)',fontSize:12,fontWeight:600,marginBottom:12}}>Add New Student to {attClass}</div>
-                  <div className="form-row">
-                    <div className="f-group"><div className="f-lab">Full Name *</div><input className="f-inp" style={{width:'100%'}} placeholder="Student name" value={newStudent.name} onChange={e=>setNewStudent({...newStudent,name:e.target.value})}/></div>
-                    <div className="f-group"><div className="f-lab">Roll No *</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. FSc-B-050" value={newStudent.roll} onChange={e=>setNewStudent({...newStudent,roll:e.target.value})}/></div>
-                  </div>
-                  <div style={{display:'flex',gap:8}}><button className="d-btn d-btn-green" onClick={addStudent}>Add Student</button><button className="d-btn d-btn-blue" onClick={()=>setShowAddStudent(false)}>Cancel</button></div>
-                </div>)}
+                                
+                  
 
                 <div className="tab-row">
                   {[['list','📋 Student List'],['profiles','👤 Class Profiles'],['performance','📊 Performance']].map(([t,l])=>(
@@ -1324,10 +1383,10 @@ const startEdit=(a)=>{
                       <div className="user-av" style={{background:'rgba(36,113,163,0.3)'}}>{s.name[0]}</div>
                       <div><div className="user-name">{s.name}</div><div className="user-detail">{s.roll}</div></div>
                       <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
-                        <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80'}}>{s.attend}%</span></div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa'}}>{s.marks}</span></div></div>
-                        <span className={`badge ${getGradeColor(s.grade)}`}>{s.grade}</span>
-                        <button className="delete-btn" onClick={e=>{e.stopPropagation();deleteStudent(s._id);}}>Remove</button>
-                      </div>
+    <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80'}}>{getStudentAttendancePct(s.roll)}%</span></div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa'}}>{s.marks}</span></div></div>
+    <span className={`badge ${getGradeColor(s.grade)}`}>{s.grade}</span>
+    <button className="delete-btn" onClick={e=>{e.stopPropagation();deleteStudent(s._id);}}>Remove</button>
+  </div>                     
                     </div>))}
                   </div>
                 </>)}
@@ -1349,11 +1408,11 @@ const startEdit=(a)=>{
                           </div>
                         </div>
                         <div className="analy-grid" style={{gridTemplateColumns:'repeat(3,1fr)',marginBottom:12}}>
-                          <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>{selectedStudent.attend}%</div><div className="analy-lab">Attendance</div></div>
+                            <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>{getStudentAttendancePct(selectedStudent.roll)}%</div><div className="analy-lab">Attendance</div></div>
                           <div className="analy-card"><div className="analy-val" style={{color:'#60a5fa'}}>{selectedStudent.marks}</div><div className="analy-lab">Marks</div></div>
                           <div className="analy-card"><div className="analy-val"><span className={`badge ${getGradeColor(selectedStudent.grade)}`}>{selectedStudent.grade}</span></div><div className="analy-lab">Grade</div></div>
                         </div>
-                        <div className="pr"><span className="pl">Attendance</span><div className="pb"><div className="pf" style={{width:`${selectedStudent.attend}%`,background:'#1D9E75'}}/></div><span className="pv">{selectedStudent.attend}%</span></div>
+                        <div className="pr"><span className="pl">Attendance</span><div className="pb"><div className="pf" style={{width:`${getStudentAttendancePct(selectedStudent.roll)}%`,background:'#1D9E75'}}/></div><span className="pv">{getStudentAttendancePct(selectedStudent.roll)}%</span></div>
                         <div className="pr"><span className="pl">Academic Score</span><div className="pb"><div className="pf" style={{width:`${selectedStudent.marks}%`,background:'#2471A3'}}/></div><span className="pv">{selectedStudent.marks}%</span></div>
                         <div style={{marginTop:10,display:'flex',gap:8}}>
                           <button className="d-btn d-btn-blue" onClick={()=>setActivePane('t-attend')}>✍️ Mark Attendance</button>
@@ -1369,7 +1428,7 @@ const startEdit=(a)=>{
                               <div><div style={{color:'#fff',fontSize:12,fontWeight:600}}>{s.name}</div><div style={{color:'rgba(255,255,255,0.35)',fontSize:9}}>{s.roll}</div></div>
                             </div>
                             <div style={{display:'flex',gap:10,justifyContent:'space-between'}}>
-                              <div style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80',fontWeight:600}}>{s.attend}%</span></div>
+                                <div style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80',fontWeight:600}}>{getStudentAttendancePct(s.roll)}%</span></div>
                               <div style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa',fontWeight:600}}>{s.marks}%</span></div>
                               <span className={`badge ${getGradeColor(s.grade)}`} style={{fontSize:9}}>{s.grade}</span>
                             </div>
@@ -1389,7 +1448,7 @@ const startEdit=(a)=>{
                         return(<div className="chart-row" key={s.roll}>
                           <span className="chart-label">{s.name.split(' ')[0]}</span>
                           <div className="chart-bar-bg"><div className="chart-bar-fill" style={{width:`${s.marks}%`,background:colors[i%colors.length]}}><span style={{color:'rgba(255,255,255,0.9)'}}>{s.marks}%</span></div></div>
-                          <span className="chart-val" style={{color:'#4ade80'}}>{s.attend}%</span>
+                          <span className="chart-val" style={{color:'#4ade80'}}>{getStudentAttendancePct(s.roll)}%</span>
                         </div>);
                       })}
                     </div>
@@ -1460,18 +1519,15 @@ const startEdit=(a)=>{
           <div className={`panel ${activePane==='t-courses'?'active':''}`}>
             {(()=>{
               const [courseTab,setCourseTab]=useState('list');
-              const [courses,setCourses]=useState([
-  {id:1,name:'Mathematics',code:'MATH-301',class:'FSc Pre-Eng Sec B',chapters:12,progress:7,status:'Active',desc:'Algebra, Trigonometry, Calculus basics'},
-  {id:2,name:'Mathematics',code:'MATH-302',class:'FSc Pre-Eng Sec A',chapters:12,progress:5,status:'Active',desc:'Polynomials, Sequences & Series'},
-]);
-              useEffect(()=>{
+              const [courses,setCourses]=useState([]);
+useEffect(()=>{
   const token=localStorage.getItem('token');
-  fetch('http://localhost:5000/api/courses',{
+  fetch('http://localhost:5000/api/courses/my',{
     headers:{'Authorization':`Bearer ${token}`}
   })
   .then(res=>res.json())
   .then(data=>{
-    if(Array.isArray(data)&&data.length>0){
+    if(Array.isArray(data)){
       setCourses(data.map(c=>({
         id:c._id,
         name:c.name,
@@ -1517,8 +1573,7 @@ useEffect(()=>{
         name:newCourse.name,
         class:newCourse.class,
         chapters:parseInt(newCourse.chapters)||0,
-        status:newCourse.status||'Active',
-        teacher:d.name
+        status:newCourse.status||'Active'
       })
     });
     const data = await res.json();
@@ -1726,7 +1781,6 @@ const deleteChap=async(chapId)=>{
                         <td><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
           <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('outline');}}>📋 Outline</button>
           <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('upload');}}>📤 Upload PDF</button>
-          <button className="d-btn" style={{background:'rgba(212,172,13,0.12)',color:'#D4AC0D',border:'1px solid rgba(212,172,13,0.25)',borderRadius:5,padding:'2px 7px',fontSize:'9px',cursor:'pointer'}} onClick={()=>startEdit(c)}>✎ Edit</button>
           <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{if(window.confirm(`Delete course "${c.name}"? This cannot be undone.`))deleteCourse(c.id);}}>🗑 Delete</button>
         </div></td>
                       </tr>);
@@ -1776,7 +1830,6 @@ const deleteChap=async(chapId)=>{
                     </div>
 
                     <div className="card">
-                      <div className="ct"><div className="ct-dot" style={{background:'#7F77DD'}}></div>Chapter Outline — {selCourse.name} <button className="add-btn" style={{marginLeft:'auto',fontSize:10}} onClick={()=>setNewChapter({title:'',status:'Pending',notes:''})}>+ Add Chapter</button></div>
                       <div className="form-row" style={{marginBottom:10,padding:'8px',background:'rgba(127,119,221,0.06)',borderRadius:8,border:'1px solid rgba(127,119,221,0.15)'}}>
                         <div className="f-group" style={{marginBottom:0}}><div className="f-lab">Chapter Title *</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. Ch 5 — Integration" value={newChapter.title} onChange={e=>setNewChapter({...newChapter,title:e.target.value})}/></div>
                         <div className="f-group" style={{marginBottom:0}}><div className="f-lab">Status</div>

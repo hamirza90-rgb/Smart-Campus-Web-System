@@ -514,7 +514,6 @@ const sendAnn=async(scheduled=false)=>{
                   {filteredStudents.map(s=>(<tr key={s._id}>
                     <td>{s.name}</td><td style={{fontSize:10}}>{s.email}</td><td style={{fontSize:10}}>{s.roll}</td><td style={{fontSize:11}}>{s.fatherName||'—'}</td>
 <td style={{fontSize:10}}>
-  <td style={{fontSize:10}}>
   <span id={`pw-${s._id}`} style={{fontFamily:'monospace'}}>••••••••</span>
   <button onClick={()=>{
     const el=document.getElementById(`pw-${s._id}`);
@@ -523,7 +522,6 @@ const sendAnn=async(scheduled=false)=>{
   }} style={{background:'none',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer',fontSize:10,padding:'0 4px',marginLeft:4}}>
     👁
   </button>
-</td>
 </td><td>{s.dept||'FSc Pre-Eng'}</td>
                     <td><span className={`badge ${s.status==='Active'?'bg':'br'}`}>{s.status||'Active'}</span></td>
                     <td><div style={{display:'flex',gap:4}}>
@@ -927,6 +925,9 @@ const sendAnn=async(scheduled=false)=>{
                   .finally(()=>setLoadingCourses(false));
               },[]);
               const [newAC,setNewAC]=useState({name:'',teacher:'',class:'',chapters:'',chapDone:'',status:'Active'});
+              const adminClassOptions = useMemo(()=>{
+  return [...new Set(allStudents.map(s=>s.dept).filter(Boolean))].sort();
+}, [allStudents]);
               const [editAC,setEditAC]=useState(null);
               const saveAC=async()=>{
   if(!newAC.name||!newAC.class){showToast('Fill Course Name and Class');return;}
@@ -1001,7 +1002,12 @@ const sendAnn=async(scheduled=false)=>{
 </div>
                     </div>
                     <div className="form-row">
-                      <div className="f-group"><div className="f-lab">Class *</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. FSc Pre-Eng Sec A" value={newAC.class} onChange={e=>setNewAC({...newAC,class:e.target.value})}/></div>
+                      <div className="f-group"><div className="f-lab">Class *</div>
+  <select className="d-select" style={{marginBottom:0}} value={newAC.class} onChange={e=>setNewAC({...newAC,class:e.target.value})}>
+    <option value="">— Select Class —</option>
+    {adminClassOptions.map(c=><option key={c} value={c}>{c}</option>)}
+  </select>
+</div>
                       <div className="f-group"><div className="f-lab">Total Chapters</div><input className="f-inp" style={{width:'100%'}} type="number" value={newAC.chapters} onChange={e=>setNewAC({...newAC,chapters:e.target.value})}/></div>
                       <div className="f-group"><div className="f-lab">Done</div><input className="f-inp" style={{width:'100%'}} type="number" value={newAC.chapDone} onChange={e=>setNewAC({...newAC,chapDone:e.target.value})}/></div>
                     </div>

@@ -3,7 +3,7 @@ import { PGCLogo, GoogleOAuthModal } from './homepage';
 
 function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
   const cred = portalCreds[role] || {};
-  const isFirstTime = !cred.isSet; // pehli baar = credentials abhi set nahi
+  const isFirstTime = role!=='admin' ? !cred.isSet : false;// pehli baar = credentials abhi set nahi
 
   // Setup mode state (pehli baar)
   const [setupEmail,setSetupEmail]=useState('');
@@ -80,9 +80,6 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
   };
   const proceedEmail=()=>{
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ setEmailErr('Please enter a valid email address'); return; }
-    if(role==='admin'){
-      if(email.toLowerCase()!==cred.email.toLowerCase()){ setEmailErr('No account found with this email'); return; }
-    }
     setEmailErr(''); setEmailStep(false);
   };
   const doLogin=async()=>{

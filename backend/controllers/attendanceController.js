@@ -2,12 +2,13 @@ const Attendance = require('../models/Attendance');
 
 exports.markAttendance = async (req, res) => {
   try {
-    const { class: className, date, records } = req.body;
+    const { class: className, subject, date, records } = req.body;
     const attendanceDocs = records.map(r => ({
       studentName: r.studentName,
       rollNo: r.rollNo,
       status: r.status,
       class: className,
+      subject: subject || '',
       date: date,
       mode: r.mode || 'Manual'
     }));

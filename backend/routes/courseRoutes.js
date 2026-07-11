@@ -1,46 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const Course = require('../models/Course');
+const { protect } = require('../middleware/authMiddleware');
+const {
+  getMyCourses,
+  getAllCourses,
+  addCourse,
+  updateCourse,
+  deleteCourse
+} = require('../controllers/courseController');
 
-// GET all courses
-router.get('/', async (req, res) => {
-  try {
-    const courses = await Course.find().sort({ createdAt: -1 });
-    res.json(courses);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+// Teacher: only their own courses (Teacher Dashboard uses this)
+router.get('/my', protect(['teacher']), getMyCourses);
 
-// POST new course
-router.post('/', async (req, res) => {
-  try {
-    const course = new Course(req.body);
-    await course.save();
-    res.status(201).json(course);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
+// General/student/admin: all courses, optionally ?class=XYZ
+router.get('/', getAllCourses);
 
-// PUT update course
-router.put('/:id', async (req, res) => {
-  try {
-    const updated = await Course.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-// DELETE course
-router.delete('/:id', async (req, res) => {
-  try {
-    await Course.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Course deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+// Teacher: create/update/delete — only their own
+router.post('/', protect(['teacher']), addCourse);
+router.put('/:id', updateCourse);
+router.delete('/:id', protect(['teacher']), deleteCourse);
 
 module.exports = router;

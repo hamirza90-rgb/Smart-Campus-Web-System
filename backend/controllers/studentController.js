@@ -1,4 +1,5 @@
 const Student = require('../models/Student');
+const jwt = require('jsonwebtoken');
 
 // Get all students
 exports.getAllStudents = async (req, res) => {
@@ -69,12 +70,18 @@ exports.deleteStudent = async (req, res) => {
 exports.loginStudent = async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log('Login attempt:', email, '| password:', password);
     const student = await Student.findOne({ email: email.toLowerCase() }).select('+password');
-    console.log('Found student:', student?.email, '| DB password:', student?.password);
     if (!student) return res.status(404).json({ message: 'Student not found' });
     if (student.password !== password) return res.status(401).json({ message: 'Incorrect password' });
+
+    const token = jwt.sign(
+      { id: student._id, role: 'student' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
     res.json({
+      token,
       id: student._id,
       name: student.name,
       email: student.email,

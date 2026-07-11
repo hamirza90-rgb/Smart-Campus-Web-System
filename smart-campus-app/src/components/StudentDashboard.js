@@ -68,16 +68,21 @@ const studentId=user.roll||'FSc-2026-B-041';
     apiCall(`/assignments/class/${encodeURIComponent(studentClass)}`)
       .then(data=>{
         if(Array.isArray(data)){
-          setRealAssignments(data.map(a=>({
-            id:a._id,
-            subject:a.subject,
-            title:a.title,
-            due:new Date(a.dueDate).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
-            instructions:a.description||'Complete and submit on time.',
-            status:'Pending',
-            total:a.totalMarks,
-            teacher:a.teacher?.name||'Unknown'
-          })));
+          setRealAssignments(data.map(a=>{
+            const mySubmission=(a.submissions||[]).find(s=>String(s.student?._id||s.student)===String(user.id));
+            return{
+              id:a._id,
+              subject:a.subject,
+              title:a.title,
+              due:new Date(a.dueDate).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
+              instructions:a.description||'Complete and submit on time.',
+              status: mySubmission ? (mySubmission.status==='Graded'?'Graded':'Submitted') : 'Pending',
+              total:a.totalMarks,
+              marks: mySubmission?.marks || null,
+              feedback: mySubmission?.feedback || '',
+              teacher:a.teacher?.name||'Unknown'
+            };
+          }));
         } else setRealAssignments([]);
       })
       .catch(()=>setRealAssignments([]));
@@ -382,7 +387,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
         <div className="sb-footer">
           <div className="sb-user">
             <div className="sb-av" style={{background:'rgba(36,113,163,0.35)'}}>{(user.name||d.name)[0]}</div>
-            <div><div className="sb-uname">{user.name||d.name}</div><div className="sb-urole">{studentSection}</div></div>
+            <div><div className="sb-uname">{user.name||d.name}</div><div className="sb-urole">{studentClass}</div></div>
           </div>
           <button className="logout-btn" onClick={onLogout}><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" width="12" height="12"><path d="M5 2H2v8h3"/><polyline points="8,4 11,6 8,8"/><line x1="5" y1="6" x2="11" y2="6"/></svg>Sign out</button>
         </div>
@@ -511,7 +516,7 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                       <div style={{fontSize:9,color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:6}}>Punjab Group of Colleges · Lalamusa</div>
                       <div style={{fontSize:18,fontWeight:800,color:'#fff',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{studentName}</div>
                       <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:2}}>Roll No: <span style={{color:'#90cdf4',fontWeight:700}}>{studentId}</span></div>
-                      <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:2}}>Section: <span style={{color:'var(--white2)',fontWeight:500}}>{studentSection}</span></div>
+                      <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:2}}>Section: <span style={{color:'var(--white2)',fontWeight:500}}>{studentClass}</span></div>
                       <div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginBottom:14}}>Program: <span style={{color:'var(--white2)',fontWeight:500}}>{studentProgram}</span></div>
                       <div style={{background:'rgba(29,131,72,0.1)',border:'1px solid rgba(29,131,72,0.25)',borderRadius:10,padding:'10px 14px',fontSize:10.5,color:'rgba(255,255,255,0.5)',lineHeight:1.8}}>
                         <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
@@ -597,13 +602,11 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
               const [selAssignId,setSelAssignId]=useState('');
               const [pastedText,setPastedText]=useState('');
               const [fileReady,setFileReady]=useState(null);
+              const [uploadedFile,setUploadedFile]=useState(null);
               const [customSubject,setCustomSubject]=useState('');
               const [customTitle,setCustomTitle]=useState('');
               const [customDue,setCustomDue]=useState('');
-              const [submissionHistory,setSubmissionHistory]=useState([
-                {id:1,subject:'Mathematics',title:'Chapter 5 Exercise',submittedOn:'2 Apr 2026',status:'Checked',marks:'22/25',feedback:'Good work, review question 4.'},
-                {id:2,subject:'Physics',title:'Wave Motion Notes',submittedOn:'28 Mar 2026',status:'Checked',marks:'18/20',feedback:'Excellent diagrams!'},
-              ]);
+              const [submissionHistory,setSubmissionHistory]=useState([]);
 
               const allSubjects=useMemo(()=>{
   const cls=studentClass.toLowerCase();
@@ -636,19 +639,33 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
 
               const submitWithPaste=async()=>{
                 if(!selAssignId){ showToast('Please select an assignment from the assigned list','⚠'); return; }
-                if(!pastedText&&!fileReady){ showToast('Please paste assignment content or upload a file','⚠'); return; }
-                const content=fileReady||pastedText;
+                if(!pastedText&&!uploadedFile){ showToast('Please paste assignment content or upload a file','⚠'); return; }
                 try{
-                  await apiCall(`/assignments/${selAssignId}/submit`,'POST',{
-                    studentId: user.id,
-                    fileUrl: content
-                  });
+                  const token = localStorage.getItem('token');
+                  let res;
+                  if(uploadedFile){
+                    const formData = new FormData();
+                    formData.append('file', uploadedFile);
+                    formData.append('studentId', user.id);
+                    res = await fetch(`http://localhost:5000/api/assignments/${selAssignId}/submit`, {
+                      method:'POST',
+                      headers:{ 'Authorization': `Bearer ${token}` },
+                      body: formData
+                    });
+                  } else {
+                    res = await fetch(`http://localhost:5000/api/assignments/${selAssignId}/submit`, {
+                      method:'POST',
+                      headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${token}` },
+                      body: JSON.stringify({ studentId: user.id, fileUrl: pastedText })
+                    });
+                  }
+                  if(!res.ok) throw new Error('submit failed');
                   const subject=d.assignments.find(a=>String(a.id)===selAssignId)?.subject||customSubject;
                   const title=d.assignments.find(a=>String(a.id)===selAssignId)?.title||customTitle;
                   const newHistEntry={id:Date.now(),subject,title:title||'Assignment',submittedOn:new Date().toLocaleDateString('en-GB'),status:'Submitted',marks:'–',feedback:'–'};
                   setSubmissionHistory(prev=>[newHistEntry,...prev]);
                   setSubmitStatuses(prev=>({...prev,[selAssignId]:'Submitted'}));
-                  setPastedText('');setFileReady(null);setSelAssignId('');setCustomSubject('');setCustomTitle('');setCustomDue('');
+                  setPastedText('');setFileReady(null);setUploadedFile(null);setSelAssignId('');setCustomSubject('');setCustomTitle('');setCustomDue('');
                   showToast('✅ Assignment submitted successfully!');
                   setAssignTab('history');
                 }catch(err){
@@ -662,6 +679,17 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                 setCustomTitle(entry.title);
                 showToast('Fill content and resubmit — resubmission allowed!','📝');
               };
+
+               const realHistory=d.assignments.filter(a=>a.status==='Submitted'||a.status==='Graded').map(a=>({
+                id:a.id,
+                subject:a.subject,
+                title:a.title,
+                submittedOn:a.due,
+                status:a.status==='Graded'?'Checked':'Submitted',
+                marks:a.marks?`${a.marks}/${a.total}`:'–',
+                feedback:a.feedback||'–'
+              }));
+              const combinedHistory=[...realHistory,...submissionHistory];
 
               return(<>
                 <div className="tab-row">{[['view','📋 My Assignments'],['submit','📤 Submit'],['history','📁 History']].map(([t,l])=><button key={t} className={`tab-btn ${assignTab===t?'active':''}`} onClick={()=>setAssignTab(t)}>{l}</button>)}</div>
@@ -686,7 +714,13 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                       <td style={{fontSize:10,color:'rgba(255,255,255,0.35)',maxWidth:100}}>{a.instructions||'Complete and submit on time.'}</td>
                       <td><span className={`badge ${getStatusColor(submitStatuses[a.id]||a.status)}`}>{submitStatuses[a.id]||a.status}</span></td>
                       <td>{a.marks?`${a.marks}/${a.total}`:'–'}</td>
-                      <td><button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 8px'}} onClick={()=>{setAssignTab('submit');setSelAssignId(String(a.id));}}>Submit</button></td>
+                      <td>
+                        {(submitStatuses[a.id]||a.status)==='Pending' ? (
+                          <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 8px'}} onClick={()=>{setAssignTab('submit');setSelAssignId(String(a.id));}}>Submit</button>
+                        ) : (
+                          <button className="d-btn" style={{background:'rgba(212,172,13,0.12)',color:'#D4AC0D',border:'1px solid rgba(212,172,13,0.25)',borderRadius:5,padding:'2px 8px',fontSize:'9px',cursor:'pointer'}} onClick={()=>{setAssignTab('submit');setSelAssignId(String(a.id));}}>🔁 Resubmit</button>
+                        )}
+                      </td>
                     </tr>))}</tbody></table>
                   </div>
                 </>)}
@@ -732,24 +766,23 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                         {fileReady?`📎 ${fileReady} (ready to submit)`:'📎 Click to select file from PC (Downloads, Desktop, etc.) — Any format, Max 10MB'}
                       </div>
                     </label>
-                    <input id="file-upload-assign" type="file" accept="*/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f){setFileReady(f.name);showToast(`📎 File selected: ${f.name} (ready to submit!)`);}}}/>
+                    <input id="file-upload-assign" type="file" accept="*/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f){setFileReady(f.name);setUploadedFile(f);showToast(`📎 File selected: ${f.name} (ready to submit!)`);}}}/>
                     {fileReady&&<div style={{fontSize:10,color:'#4ade80',marginBottom:8}}>✅ File ready: {fileReady}</div>}
 
                     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                       <button className="d-btn d-btn-green" onClick={submitWithPaste}>📤 Submit Assignment</button>
-                      <button className="d-btn d-btn-blue" onClick={()=>{setPastedText('');setFileReady(null);setSelAssignId('');setCustomSubject('');setCustomTitle('');}}>🔄 Clear</button>
+                      <button className="d-btn d-btn-blue" onClick={()=>{setPastedText('');setFileReady(null);setUploadedFile(null);setSelAssignId('');setCustomSubject('');setCustomTitle('');}}>🔄 Clear</button>
                       <button className="d-btn" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'6px 14px',fontSize:11,cursor:'pointer'}} onClick={()=>setAssignTab('view')}>Back to List</button>
                     </div>
                   </div>
                 )}
-
-                {assignTab==='history'&&(
+{assignTab==='history'&&(
                   <div className="card">
-                    <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>📁 Submission History ({submissionHistory.length})</div>
+                    <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>📁 Submission History ({combinedHistory.length})</div>
                     <div style={{fontSize:11,color:'rgba(255,255,255,0.3)',marginBottom:10}}>Aap ki tamam submitted assignments ka record. Status check karein aur zarurat ho to resubmit karein.</div>
-                    {submissionHistory.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:'rgba(255,255,255,0.25)',fontSize:12}}>Koi submission nahi mili abhi tak.</div>}
+                    {combinedHistory.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:'rgba(255,255,255,0.25)',fontSize:12}}>Koi submission nahi mili abhi tak.</div>}
                     <table className="mt"><thead><tr><th>Subject</th><th>Title</th><th>Submitted On</th><th>Status</th><th>Marks</th><th>Feedback</th><th>Action</th></tr></thead>
-                    <tbody>{submissionHistory.map((h,i)=>(
+                    <tbody>{combinedHistory.map((h,i)=>(
                       <tr key={h.id}>
                         <td>{h.subject}</td>
                         <td>{h.title}</td>
