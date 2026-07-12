@@ -16,8 +16,7 @@ exports.addTeacher = async (req, res) => {
     const { name, email, password, dept, phone } = req.body;
     const existing = await Teacher.findOne({ email });
     if (existing) return res.status(400).json({ message: 'Teacher already exists' });
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const teacher = await Teacher.create({ name, email, password: hashedPassword, dept, phone });
+    const teacher = await Teacher.create({ name, email, password, dept, phone });
     res.status(201).json({ message: 'Teacher added successfully', teacher });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
