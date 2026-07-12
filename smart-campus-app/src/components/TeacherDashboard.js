@@ -117,8 +117,6 @@ useEffect(()=>{
     .catch(() => {});
 }, []);
   const [searchTerm,setSearchTerm]=useState('');
-  const [showAddStudent,setShowAddStudent]=useState(false);
-  const [newStudent,setNewStudent]=useState({name:'',roll:'',attend:100,marks:0,grade:'A'});
   const d=initMockData.teacher;
   const html5QrCodeRef=useRef(null); // ── v26 QR scanner ref
   const [activeScanStudent,setActiveScanStudent]=useState(null);
@@ -180,35 +178,6 @@ useEffect(()=>{
     showToast('Attendance saved & downloaded!');
   };
   const filteredStudents=students.filter(s=>s.name.toLowerCase().includes(searchTerm.toLowerCase())||s.roll.toLowerCase().includes(searchTerm.toLowerCase()));
-  const addStudent=async()=>{
-  if(!newStudent.name||!newStudent.roll){ showToast('Please fill Name and Roll No'); return; }
-  const token = localStorage.getItem('token');
-  try{
-    const res = await fetch('http://localhost:5000/api/students', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ name: newStudent.name, roll: newStudent.roll, dept: attClass })
-    });
-    const data = await res.json();
-    if(res.ok && data.student){
-      setStudents(prev=>[...prev,{
-        _id: data.student._id,
-        name: data.student.name,
-        roll: data.student.roll,
-        attend: data.student.attend||100,
-        marks: data.student.marks||0,
-        grade: data.student.grade||'N/A'
-      }]);
-      showToast('Student added successfully!');
-    } else {
-      showToast('⚠️ '+(data.message||'Backend error'));
-    }
-  }catch(e){
-    showToast('⚠️ Backend save nahi hua');
-  }
-  setNewStudent({name:'',roll:'',attend:100,marks:0,grade:'A'});
-  setShowAddStudent(false);
-};
 const deleteStudent=async(id)=>{
   setStudents(prev=>prev.filter(s=>s._id!==id));
   try{
@@ -317,10 +286,26 @@ const deleteStudent=async(id)=>{
                 {realCourses.length>0 ? realCourses.map(c=>(<div className="ri" key={c._id}><div><div className="rm">{c.class}</div><div className="rs">{c.name} · Teacher: {c.teacher}</div></div><span className={`badge ${c.status==='Active'?'bg':'bb'}`}>{c.status}</span></div>)) : <div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'12px 0'}}>No courses yet.</div>}
               </div>
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>Pending Assignments</div>
-  {homeAssignments.filter(a=>a.status==='Active').length===0&&(
-    <div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'12px 0'}}>No pending assignments.</div>
-  )}
-  {homeAssignments.filter(a=>a.status==='Active').map(a=>(<div className="ri" key={a._id}><div><div className="rm">{a.subject} – {a.title}</div><div className="rs">Due: {a.dueDate?new Date(a.dueDate).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):'—'}</div></div><button className="badge br" style={{border:'none',cursor:'pointer',background:'rgba(192,57,43,0.2)',color:'#f87171'}} onClick={()=>setActivePane('t-assign')}>Review →</button></div>))}
+  {(()=>{
+    const pendingAssignments = homeAssignments.filter(a=>
+      a.status==='Active' && (a.submissions||[]).some(s=>s.status!=='Graded')
+    );
+    if(pendingAssignments.length===0){
+      return <div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'12px 0'}}>No pending assignments.</div>;
+    }
+    return pendingAssignments.map(a=>{
+      const ungradedCount = (a.submissions||[]).filter(s=>s.status!=='Graded').length;
+      return (
+        <div className="ri" key={a._id}>
+          <div>
+            <div className="rm">{a.subject} – {a.title}</div>
+            <div className="rs">Due: {a.dueDate?new Date(a.dueDate).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):'—'} · {ungradedCount} to grade</div>
+          </div>
+          <button className="badge br" style={{border:'none',cursor:'pointer',background:'rgba(192,57,43,0.2)',color:'#f87171'}} onClick={()=>setActivePane('t-assign')}>Review →</button>
+        </div>
+      );
+    });
+  })()}
 </div>
             </div>
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Top Students</div>
@@ -376,7 +361,7 @@ const filtStu=classStudents.filter(s=>s.name.toLowerCase().includes(stuSearch.to
               const submitAttendance = async () => {
   const date = new Date(attDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
   const newSession = {
-    date, class: attClass,
+    date, class: attClass, subject: attSubject || currentSubjects[0] || '',
     p: attMode==='qr' ? scannedNames.length : classStudents.filter(s=>manualData[s.name]==='P').length,
 a: attMode==='qr' ? remainingStudents.length : classStudents.filter(s=>manualData[s.name]==='A'||!manualData[s.name]).length,
 l: classStudents.filter(s=>manualData[s.name]==='L').length,
@@ -510,7 +495,7 @@ l: classStudents.filter(s=>manualData[s.name]==='L').length,
                       {savedSessions.slice(0,5).map((r,i)=>(
                         <div key={i} style={{display:'flex',gap:12,alignItems:'center',padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,0.04)',fontSize:11}}>
                           <span style={{color:'rgba(255,255,255,0.3)',minWidth:50}}>{r.date}</span>
-                          <span style={{color:'var(--white2)',flex:1}}>{r.class}</span>
+                          <span style={{color:'var(--white2)',flex:1}}>{r.class}{r.subject?` · ${r.subject}`:''}</span>
                           <span style={{fontSize:9,color:'rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'1px 7px'}}>{r.mode||'Manual'}</span>
                           <span style={{color:'#4ade80'}}>{r.p}P</span>
                           <span style={{color:'#f87171'}}>{r.a}A</span>
@@ -812,7 +797,9 @@ useEffect(()=>{
           dueDate: a.dueDate ? new Date(a.dueDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) : '',
           assignedTo: 'Class',
           status: a.status,
-          totalMarks: a.totalMarks
+          totalMarks: a.totalMarks,
+          attachmentPath: a.attachmentPath || null,
+          attachmentName: a.attachmentName || null
         })));
       }
     })
@@ -864,6 +851,7 @@ useEffect(()=>{
               const addOrUpdateAssign=()=>{
   if(!newAssign.topic.trim()||!newAssign.dueDate){ showToast('Fill topic and due date','⚠️ '); return; }
   const token = localStorage.getItem('token');
+  const attachedFile = newAssign.uploadedFileObj || null;
   if(editingAssign){
     fetch(`http://localhost:5000/api/assignments/${editingAssign.id}`, {
       method: 'PUT',
@@ -902,18 +890,36 @@ useEffect(()=>{
       });
     setEditingAssign(null);
   } else {
-    fetch('http://localhost:5000/api/assignments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({
-  title: newAssign.topic,
-  description: newAssign.instructions,
-  subject: newAssign.subject,
-  class: newAssign.cls,
-  dueDate: newAssign.dueDate,
-  totalMarks: newAssign.totalMarks
-})
-    })
+    let fetchPromise;
+    if(attachedFile){
+      const formData = new FormData();
+      formData.append('file', attachedFile);
+      formData.append('title', newAssign.topic);
+      formData.append('description', newAssign.instructions);
+      formData.append('subject', newAssign.subject);
+      formData.append('class', newAssign.cls);
+      formData.append('dueDate', newAssign.dueDate);
+      formData.append('totalMarks', newAssign.totalMarks);
+      fetchPromise = fetch('http://localhost:5000/api/assignments', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+    } else {
+      fetchPromise = fetch('http://localhost:5000/api/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          title: newAssign.topic,
+          description: newAssign.instructions,
+          subject: newAssign.subject,
+          class: newAssign.cls,
+          dueDate: newAssign.dueDate,
+          totalMarks: newAssign.totalMarks
+        })
+      });
+    }
+    fetchPromise
       .then(res => res.json())
       .then(data => {
         if (data.assignment) {
@@ -923,10 +929,12 @@ useEffect(()=>{
             cls: data.assignment.class,
             topic: data.assignment.title,
             instructions: data.assignment.description,
-            dueDate: data.assignment.dueDate,
+            dueDate: data.assignment.dueDate ? new Date(data.assignment.dueDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) : '',
             assignedTo: 'Class',
             status: data.assignment.status,
-            totalMarks: data.assignment.totalMarks
+            totalMarks: data.assignment.totalMarks,
+            attachmentPath: data.assignment.attachmentPath || null,
+            attachmentName: data.assignment.attachmentName || null
           }]);
           showToast('✅ Assignment created and assigned!');
         } else {
@@ -1005,7 +1013,18 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
                     <table className="mt"><thead><tr><th>Subject</th><th>Class</th><th>Topic</th><th>Due Date</th><th>Marks</th><th>Status</th><th>Actions</th></tr></thead>
 <tbody>{tAssignments.map(a=>(
   <tr key={a.id}>
-    <td>{a.subject}</td><td style={{fontSize:10}}>{a.cls}</td><td style={{maxWidth:120,fontSize:11}}>{a.topic}</td>
+    <td>{a.subject}</td><td style={{fontSize:10}}>{a.cls}</td>
+    <td style={{maxWidth:160,fontSize:11}}>
+      {a.topic}
+      {a.instructions&&<div style={{fontSize:9,color:'rgba(255,255,255,0.35)',marginTop:2,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.instructions}</div>}
+      {a.attachmentPath&&(
+        <div style={{marginTop:3}}>
+          <a href={`http://localhost:5000/uploads/${a.attachmentPath}`} target="_blank" rel="noopener noreferrer" style={{color:'#60a5fa',fontSize:9,textDecoration:'none'}}>
+            📎 {a.attachmentName||'View attachment'}
+          </a>
+        </div>
+      )}
+    </td>
     <td style={{fontSize:10}}>{a.dueDate}</td>
     <td>/{a.totalMarks}</td>
                         <td><span className={`badge ${a.status==='Active'?'bg':'bb'}`}>{a.status}</span></td>
@@ -1042,7 +1061,7 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
                         {newAssign.file?`📎 ${newAssign.file} (ready)`:'📎 Click to select file from PC (Downloads, Desktop, etc.)'}
                       </div>
                     </label>
-                    <input id="teacher-assign-file" type="file" accept="*/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f){setNewAssign({...newAssign,file:f.name});showToast(`📎 File selected: ${f.name}`);}}}/>
+                    <input id="teacher-assign-file" type="file" accept="*/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f){setNewAssign({...newAssign,file:f.name,uploadedFileObj:f});showToast(`📎 File selected: ${f.name}`);}}}/>
                     <div className="f-group"><div className="f-lab">Or Paste Assignment Content Here</div>
                       <textarea className="f-inp" style={{width:'100%',minHeight:80,resize:'vertical'}} placeholder="Assignment content paste karein..." value={newAssign.pastedContent||''} onChange={e=>setNewAssign({...newAssign,pastedContent:e.target.value})}/>
                     </div>
@@ -1599,7 +1618,6 @@ const deleteCourse=async(id)=>{
   }catch(e){}
   showToast('Course deleted.','🗑');
 };
-const startEdit=(c)=>{setNewCourse({...c});setEditingCourse(c);setCourseTab('add');};
 const updateCourse=async()=>{
   try{
     const token = localStorage.getItem('token');

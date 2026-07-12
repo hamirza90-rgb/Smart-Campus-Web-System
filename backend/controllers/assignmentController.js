@@ -9,11 +9,18 @@ exports.createAssignment = async (req, res) => {
       return res.status(401).json({ message: 'Unauthorized — teacher not identified' });
     }
 
-    const assignment = await Assignment.create({
+    const assignmentData = {
       title, description, subject, class: className,
       teacher: req.user.id,   // secure — from token, not client
       dueDate, totalMarks
-    });
+    };
+
+    if (req.file) {
+      assignmentData.attachmentPath = req.file.filename;
+      assignmentData.attachmentName = req.file.originalname;
+    }
+
+    const assignment = await Assignment.create(assignmentData);
 
     res.status(201).json({ message: 'Assignment created', assignment });
   } catch (error) {

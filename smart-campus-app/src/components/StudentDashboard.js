@@ -70,7 +70,7 @@ const studentId=user.roll||'FSc-2026-B-041';
         if(Array.isArray(data)){
           setRealAssignments(data.map(a=>{
             const mySubmission=(a.submissions||[]).find(s=>String(s.student?._id||s.student)===String(user.id));
-            return{
+           return{
               id:a._id,
               subject:a.subject,
               title:a.title,
@@ -80,7 +80,9 @@ const studentId=user.roll||'FSc-2026-B-041';
               total:a.totalMarks,
               marks: mySubmission?.marks || null,
               feedback: mySubmission?.feedback || '',
-              teacher:a.teacher?.name||'Unknown'
+              teacher:a.teacher?.name||'Unknown',
+              attachmentPath: a.attachmentPath || null,
+              attachmentName: a.attachmentName || null
             };
           }));
         } else setRealAssignments([]);
@@ -711,7 +713,16 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
                     <table className="mt"><thead><tr><th>Subject</th><th>Title</th><th>Due Date</th><th>Instructions</th><th>Status</th><th>Marks</th><th>Action</th></tr></thead>
                     <tbody>{filteredAssignments2.map((a,i)=>(<tr key={i}>
                       <td>{a.subject}</td><td>{a.title}</td><td>{a.due}</td>
-                      <td style={{fontSize:10,color:'rgba(255,255,255,0.35)',maxWidth:100}}>{a.instructions||'Complete and submit on time.'}</td>
+                      <td style={{fontSize:10,color:'rgba(255,255,255,0.35)',maxWidth:100}}>
+                        {a.instructions||'Complete and submit on time.'}
+                        {a.attachmentPath&&(
+                          <div style={{marginTop:4}}>
+                            <a href={`http://localhost:5000/uploads/${a.attachmentPath}`} target="_blank" rel="noopener noreferrer" style={{color:'#60a5fa',fontSize:9,textDecoration:'none'}}>
+                              📎 {a.attachmentName||'Download attachment'}
+                            </a>
+                          </div>
+                        )}
+                      </td>
                       <td><span className={`badge ${getStatusColor(submitStatuses[a.id]||a.status)}`}>{submitStatuses[a.id]||a.status}</span></td>
                       <td>{a.marks?`${a.marks}/${a.total}`:'–'}</td>
                       <td>

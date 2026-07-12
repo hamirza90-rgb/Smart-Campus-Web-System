@@ -34,7 +34,7 @@ router.get('/my', protect(['teacher']), getMyAssignments);
 router.get('/class/:className', getAssignments);
 
 // TEACHER: create — teacher identified from JWT
-router.post('/', protect(['teacher']), createAssignment);
+router.post('/', protect(['teacher']), upload.single('file'), createAssignment);
 
 // ADMIN: get every assignment
 router.get('/', getAllAssignments);

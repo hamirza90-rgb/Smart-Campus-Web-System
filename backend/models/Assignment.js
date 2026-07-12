@@ -9,6 +9,8 @@ const assignmentSchema = new mongoose.Schema({
   dueDate: { type: Date, required: true },
   status: { type: String, enum: ['Active', 'Approved', 'Removed'], default: 'Active' },
   totalMarks: { type: Number, required: true },
+  attachmentPath: { type: String },
+  attachmentName: { type: String },
   submissions: [{
     student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
     submittedAt: { type: Date },
