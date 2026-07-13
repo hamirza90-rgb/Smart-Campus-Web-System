@@ -14,10 +14,20 @@ exports.getMyCourses = async (req, res) => {
 // PUBLIC/STUDENT/ADMIN: get all courses, optionally filtered by ?class=XYZ
 exports.getAllCourses = async (req, res) => {
   try {
+    const Chapter = require('../models/Chapter');
     const filter = {};
     if (req.query.class) filter.class = req.query.class;
     const courses = await Course.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(courses);
+    const coursesWithProgress = await Promise.all(courses.map(async (course) => {
+      const allChapters = await Chapter.find({ course: course._id });
+      const completedChapters = allChapters.filter(c => c.status === 'Completed').length;
+      return {
+        ...course.toObject(),
+        chapDone: completedChapters,
+        chapters: course.chapters || 0
+      };
+    }));
+    res.status(200).json(coursesWithProgress);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

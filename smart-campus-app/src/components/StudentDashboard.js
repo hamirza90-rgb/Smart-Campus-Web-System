@@ -47,15 +47,25 @@ const studentProgram=getProgramName(studentClass);
 const studentId=user.roll||'FSc-2026-B-041';
   useEffect(()=>{
     apiCall('/courses')
-      .then(data=>{
+      .then(async data=>{
         if(Array.isArray(data)){
-          const myCourses=data.filter(c=>c.class===studentClass).map(c=>({
-            id:c._id,
-            name:c.name,
-            teacher:c.teacher,
-            code:c.code||'',
-            lectures:c.chapters||0,
-            notes:[]
+          const filtered=data.filter(c=>c.class===studentClass);
+          const myCourses=await Promise.all(filtered.map(async c=>{
+            let notes=[];
+            try{
+              const materials=await apiCall(`/materials/course/${c._id}`);
+              if(Array.isArray(materials)){
+                notes=materials.map(m=>({name:m.name,filePath:m.filePath}));
+              }
+            }catch(e){}
+            return {
+              id:c._id,
+              name:c.name,
+              teacher:c.teacher,
+              code:c.code||'',
+              lectures:c.chapters||0,
+              notes
+            };
           }));
           setCourses(myCourses);
         } else setCourses([]);
@@ -115,7 +125,7 @@ useEffect(()=>{
       apiCall(`/studentresults/${user.id}`)
         .then(data=>{
           if(Array.isArray(data)){
-            setRealResults(data.map(r=>({
+            setRealResults(data.filter(r=>r.isPublished!==false).map(r=>({
               subject:r.subject,
               marks:r.marks,
               total:r.total,
@@ -876,6 +886,10 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
           <div className={`panel ${activePane==='s-course'?'active':''}`}>
             {(()=>{
               const downloadCourseMaterial=(course,note)=>{
+                if(note.filePath){
+  window.open(`http://localhost:5000/uploads/${note.filePath}`, '_blank');
+  return;
+}
                 const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
                 // Build a realistic, styled course notes HTML document
                 const sampleTopics={

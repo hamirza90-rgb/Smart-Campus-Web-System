@@ -6,13 +6,26 @@ import { PGCLogo, Toast } from './homepage';
 function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,teacherNotifs,setTeacherNotifs}){
   const [activePane,setActivePane]=useState('t-home');
   const [toast,setToast]=useState(null);
-  const [attClass,setAttClass]=useState('');
+const [attClass,setAttClass]=useState('FSc Pre-Eng Sec B');
+  const [examSubject,setExamSubject]=useState(()=>localStorage.getItem(`subject_${user?.dept||''}_Monthly Test`)||'');
   const getLocalDateStr=()=>{
   const d=new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
   const [attData]=useState({});
-  const [students,setStudents]=useState(initMockData.teacher.students);
+  const [students,setStudents]=useState([]);
+useEffect(()=>{
+  if(!user?.dept) return;
+  const token=localStorage.getItem('token');
+  fetch(`http://localhost:5000/api/students?dept=${encodeURIComponent(user.dept)}`,{
+    headers:{'Authorization':`Bearer ${token}`}
+  })
+    .then(res=>res.json())
+    .then(data=>{
+      if(Array.isArray(data)) setStudents(data);
+    })
+    .catch(()=>{});
+},[]);
   const classStudents = students.filter(s => s.dept === attClass);
   const [realCourses, setRealCourses] = useState([]);
 useEffect(()=>{
@@ -32,7 +45,7 @@ useEffect(()=>{
 const [homeAttendance, setHomeAttendance] = useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
-  const classNames = realCourses.length > 0 ? realCourses.map(c => c.class) : myClasses.map(c => c.name);
+  const classNames = realCourses.map(c => c.class).filter(Boolean);
   Promise.all(
     classNames.map(cls =>
       fetch(`http://localhost:5000/api/attendance/class/${encodeURIComponent(cls)}`, {
@@ -1182,50 +1195,63 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
           {/* RESULTS */}
           <div className={`panel ${activePane==='t-result'?'active':''}`}>
             {(()=>{
-              const [examType,setExamType]=useState('Monthly Test');
-              const [examClass,setExamClass]=useState(myClasses[0]?.name||'FSc Pre-Eng Sec A');
-              const [totalMarks,setTotalMarks]=useState(100);
+              const [examType,setExamType]=useState(()=>localStorage.getItem(`examType_${user?.dept||''}`)||'Monthly Test');
+              const [examClass,setExamClass]=useState(user?.dept||'');
+              useEffect(()=>{
+  if(realCourses.length>0 && !examClass){
+    setExamClass(realCourses[0].class);
+  }
+},[realCourses]);
+              const [totalMarks,setTotalMarks]=useState(()=>parseInt(localStorage.getItem(`totalMarks_${examClass}`))||100);
+              const [examSubject,setExamSubject]=useState('');
               const [resultRows,setResultRows]=useState(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
   
-              useEffect(()=>{
-  setResultRows(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-},[students]);
+             useEffect(()=>{
+  const filtered=students.filter(s=>{
+    const sDept=(s.dept||'').toLowerCase().trim();
+    const eClass=(examClass||'').toLowerCase().trim();
+    return eClass===''||sDept===eClass||sDept.includes(eClass)||eClass.includes(sDept);
+  });
+  if(filtered.length===0) return;
+  const token=localStorage.getItem('token');
+  Promise.all(filtered.map(s=>
+    fetch(`http://localhost:5000/api/studentresults/${s._id}`,{
+      headers:{'Authorization':`Bearer ${token}`}
+    }).then(r=>r.json()).catch(()=>[])
+  )).then(results=>{
+    const rows=filtered.map((s,i)=>{
+      const res=Array.isArray(results[i])?results[i].find(r=>r.examName===examType):null;
+      return {
+        _id:s._id,
+        name:s.name,
+        roll:s.roll,
+        marks:res?res.marks:0,
+        grade:res?calcGrade(res.marks,totalMarks):'N/A',
+        subject:res?res.subject:''
+      };
+    });
+    setResultRows(rows);
+    const savedSubject=localStorage.getItem(`subject_${examClass}_${examType}`);
+if(savedSubject) setExamSubject(savedSubject);
+    if(rows[0]?.subject) setExamSubject(rows[0].subject);
+  });
+},[students,examClass,examType]);
               const [showAddRow,setShowAddRow]=useState(false);
               const [newRow,setNewRow]=useState({name:'',roll:'',marks:0});
               const [editIdx,setEditIdx]=useState(null);
               const [editRow,setEditRow]=useState(null);
               const calcGrade=(m,t)=>{ const p=t>0?m/t*100:0; if(p>=90)return'A+'; if(p>=80)return'A'; if(p>=70)return'B+'; if(p>=60)return'B'; if(p>=50)return'C'; if(p>=40)return'D'; return'F'; };
-              const updateMark=(i,val)=>{ setResultRows(prev=>{ const r=[...prev]; const m=Math.min(Number(val),totalMarks); r[i]={...r[i],marks:isNaN(m)?0:m,grade:calcGrade(isNaN(m)?0:m,totalMarks)}; return r; }); };
+              const updateMark=(i,val)=>{ setResultRows(prev=>{ const r=[...prev]; const m=Math.min(Number(val),totalMarks); r[i]={...r[i],marks:isNaN(m)?0:m,grade:calcGrade(isNaN(m)?0:m,totalMarks),subject:examSubject}; const key=`results_${examClass}_${examType}`; localStorage.setItem(key,JSON.stringify(r)); return r; }); };
               const addRow=()=>{ if(!newRow.name.trim()){ showToast('Enter student name','⚠'); return; } const m=Math.min(Number(newRow.marks)||0,totalMarks); setResultRows(prev=>[...prev,{name:newRow.name,roll:newRow.roll||`NEW-${Date.now()}`,marks:m,grade:calcGrade(m,totalMarks)}]); setNewRow({name:'',roll:'',marks:0}); setShowAddRow(false); showToast('Student added to result!'); };
               const deleteRow=(i)=>{ setResultRows(prev=>prev.filter((_,idx)=>idx!==i)); showToast('Student removed from result.','🗑'); };
-              const startEdit=(i)=>{ setEditIdx(i); setEditRow({...resultRows[i]}); };
+              const startEdit=(i)=>{ setEditIdx(i); setEditRow({...resultRows[i],subject:resultRows[i].subject||''}); };
               const saveEdit=()=>{ const m=Math.min(Number(editRow.marks)||0,totalMarks); setResultRows(prev=>{ const r=[...prev]; r[editIdx]={...editRow,marks:m,grade:calcGrade(m,totalMarks)}; return r; }); setEditIdx(null); setEditRow(null); showToast('Result updated!'); };
               const saveAndDownload= async ()=>{
+                localStorage.setItem(`subject_${examClass}_${examType}`, examSubject);
+localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
+                console.log('examSubject:', examSubject, 'examType:', examType);
                 // Backend pe save karo — har student ke liye alag entry
-                try {
-                  const token = localStorage.getItem('token');
-                  for (const r of resultRows) {
-                    if (!r._id) continue;
-                    await fetch('http://localhost:5000/api/results', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                      },
-                      body: JSON.stringify({
-                        student: r._id,
-                        class: examClass,
-                        month: new Date().toLocaleString('en-GB',{month:'long'}),
-                        year: new Date().getFullYear(),
-                        subjects: [{ name: examType, totalMarks, obtainedMarks: r.marks }]
-                      })
-                    });
-                  }
-                  showToast('✅ Result MongoDB mein save ho gaya!');
-                } catch(e) {
-                  showToast('⚠️ Backend save nahi hua');
-                }
+                
                 const date=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
                 const rowsHtml=resultRows.map((r,i)=>{
                   const pct=Math.round(r.marks/totalMarks*100);
@@ -1258,7 +1284,7 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
     <div><div style="font-size:11pt;color:#6b7280;font-family:'Times New Roman',serif;text-transform:uppercase;letter-spacing:0.06em">Class</div><div style="font-size:14pt;font-weight:bold;color:#0f2444;font-family:'Times New Roman',serif">${examClass}</div></div>
     <div><div style="font-size:11pt;color:#6b7280;font-family:'Times New Roman',serif;text-transform:uppercase;letter-spacing:0.06em">Total Marks</div><div style="font-size:14pt;font-weight:bold;color:#0f2444;font-family:'Times New Roman',serif">${totalMarks}</div></div>
     <div><div style="font-size:11pt;color:#6b7280;font-family:'Times New Roman',serif;text-transform:uppercase;letter-spacing:0.06em">Date</div><div style="font-size:14pt;font-weight:bold;color:#0f2444;font-family:'Times New Roman',serif">${date}</div></div>
-    <div><div style="font-size:11pt;color:#6b7280;font-family:'Times New Roman',serif;text-transform:uppercase;letter-spacing:0.06em">Teacher</div><div style="font-size:14pt;font-weight:bold;color:#0f2444;font-family:'Times New Roman',serif">Sir Asif Mehmood</div></div>
+    <div><div style="font-size:11pt;color:#6b7280;font-family:'Times New Roman',serif;text-transform:uppercase;letter-spacing:0.06em">Teacher</div><div style="font-size:14pt;font-weight:bold;color:#0f2444;font-family:'Times New Roman',serif">${user?.name||'Teacher'}</div></div>
   </div>
   <div style="padding:24px 36px">
     <div style="font-size:18pt;font-weight:bold;font-family:'Times New Roman',serif;color:#0f2444;margin-bottom:14px;border-bottom:2px solid #0f2444;padding-bottom:8px">Student Results — ${examType}</div>
@@ -1299,13 +1325,17 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
               };
               return(<>
                 <div className="card">
-                  <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Result Entry — Mathematics
+                  <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Result Entry — {examSubject||'Results'}
                     <button className="add-btn" style={{marginLeft:'auto'}} onClick={()=>setShowAddRow(v=>!v)}>+ Add Student</button>
                   </div>
                   <div className="form-row" style={{marginBottom:12,gap:12}}>
+                  <div style={{flex:1}}>
+  <div className="f-lab">Subject</div>
+<input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. Mathematics, Physics..." value={examSubject} onChange={e=>{const val=e.target.value;setExamSubject(val);localStorage.setItem(`subject_${examClass}_${examType}`,val);setResultRows(prev=>prev.map(r=>({...r,subject:val})));}}/>
+</div>
                     <div style={{flex:1}}>
                       <div className="f-lab">Exam Type (type anything)</div>
-                      <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. December Test, Phase 1, Quiz..." value={examType} onChange={e=>setExamType(e.target.value)}/>
+                     <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. December Test, Phase 1, Quiz..." value={examType} onChange={e=>{setExamType(e.target.value);localStorage.setItem(`examType_${examClass}`,e.target.value);}}/>
                     </div>
                     <div style={{flex:1}}>
                       <div className="f-lab">Class (type or pick)</div>
@@ -1314,7 +1344,7 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
                     </div>
                     <div style={{width:110}}>
                       <div className="f-lab">Total Marks</div>
-                      <input className="f-inp" type="number" style={{width:'100%',marginTop:4}} min="0" max="1000" value={totalMarks} onChange={e=>{ const t=parseInt(e.target.value)||100; setTotalMarks(t); setResultRows(prev=>prev.map(r=>({...r,grade:calcGrade(r.marks,t)}))); }}/>
+                      <input className="f-inp" type="number" style={{width:'100%',marginTop:4}} min="0" max="1000" value={totalMarks} onChange={e=>{ const t=parseInt(e.target.value)||0; setTotalMarks(t); localStorage.setItem(`totalMarks_${examClass}`,t); setResultRows(prev=>prev.map(r=>({...r,grade:calcGrade(r.marks,t)}))); }}/>
                     </div>
                   </div>
 
@@ -1332,6 +1362,7 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
                     <div style={{color:'var(--white2)',fontSize:12,fontWeight:600,marginBottom:10}}>Edit: {editRow.name}</div>
                     <div className="form-row">
                       <div className="f-group"><div className="f-lab">Student Name</div><input className="f-inp" style={{width:'100%'}} value={editRow.name} onChange={e=>setEditRow({...editRow,name:e.target.value})}/></div>
+                      <div className="f-group"><div className="f-lab">Subject</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. Mathematics" value={editRow.subject!==undefined?editRow.subject:''} onChange={e=>setEditRow({...editRow,subject:e.target.value})}/></div>
                       <div className="f-group"><div className="f-lab">Roll No</div><input className="f-inp" style={{width:'100%'}} value={editRow.roll} onChange={e=>setEditRow({...editRow,roll:e.target.value})}/></div>
                       <div className="f-group"><div className="f-lab">Marks (out of {totalMarks})</div><input className="f-inp" type="number" style={{width:'100%'}} min="0" max={totalMarks} value={editRow.marks} onChange={e=>setEditRow({...editRow,marks:e.target.value})}/></div>
                     </div>
@@ -1339,11 +1370,12 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
                   </div>}
 
                   <table className="mt">
-                    <thead><tr><th>Student</th><th>Roll No</th><th>Marks</th><th>Total</th><th>Grade</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Student</th><th>Roll No</th><th>Subject</th><th>Marks</th><th>Total</th><th>Grade</th><th>Actions</th></tr></thead>
                     <tbody>{resultRows.map((r,i)=>(<tr key={i}>
                       <td>{r.name}</td>
-                      <td style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>{r.roll}</td>
-                      <td><input className="f-inp" type="number" min="0" max={totalMarks} value={r.marks} style={{width:60}} onChange={e=>updateMark(i,e.target.value)}/></td>
+<td style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>{r.roll}</td>
+<td style={{fontSize:11}}>{r.subject||'—'}</td>
+<td><input className="f-inp" type="number" min="0" max={totalMarks} value={r.marks} style={{width:60}} onChange={e=>updateMark(i,e.target.value)}/></td>
                       <td style={{color:'rgba(255,255,255,0.4)',fontSize:11}}>{totalMarks}</td>
                       <td><span className={`badge ${getGradeColor(r.grade)}`}>{r.grade}</span></td>
                       <td><div style={{display:'flex',gap:4}}>
@@ -1353,7 +1385,23 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
                     </tr>))}</tbody>
                   </table>
                   <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-                    <button className="d-btn d-btn-green" onClick={saveAndDownload}>💾 Save & Download Result</button>
+                    <button className="d-btn d-btn-green" onClick={async()=>{
+  try{
+    const token=localStorage.getItem('token');
+    for(const r of resultRows){
+      if(!r._id) continue;
+      await fetch('http://localhost:5000/api/studentresults',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+        body:JSON.stringify({student:r._id,subject:examSubject||r.subject,marks:r.marks,total:totalMarks,class:examClass,examType:examType,examName:examType})
+      });
+    }
+    localStorage.setItem(`subject_${examClass}_${examType}`,examSubject);
+    localStorage.setItem(`totalMarks_${examClass}`,totalMarks);
+    showToast('✅ Result saved successfully!');
+  }catch(e){showToast('⚠️ not saved');}
+}}>💾 Save Result</button>
+<button className="d-btn d-btn-blue" onClick={saveAndDownload}>⬇ Download Result</button>
                     <span style={{fontSize:10,color:'rgba(255,255,255,0.3)'}}>File will download to your PC automatically</span>
                   </div>
                   <div style={{marginTop:10,padding:'8px 12px',background:'rgba(36,113,163,0.1)',borderRadius:8,border:'1px solid rgba(36,113,163,0.2)',fontSize:10.5,color:'rgba(255,255,255,0.4)'}}>
@@ -1546,27 +1594,47 @@ useEffect(()=>{
   })
   .then(res=>res.json())
   .then(data=>{
-    if(Array.isArray(data)){
-      setCourses(data.map(c=>({
+    if(Array.isArray(data)&&data.length>0){
+      const myCourses=data.map(c=>({
         id:c._id,
         name:c.name,
         code:c._id,
         class:c.class,
         chapters:c.chapters||0,
+        chapDone:c.chapDone||0,
         progress:c.chapDone||0,
         status:c.status||'Active',
         desc:c.desc||''
-      })));
+      }));
+      setCourses(myCourses);
+      setRealCourses(data);
+      if(!selCourse && myCourses.length>0) setSelCourse(myCourses[0]);
     }
   })
   .catch(()=>{});
 },[]);
+useEffect(()=>{
+  if(courses.length===0) return;
+  const token=localStorage.getItem('token');
+  Promise.all(courses.map(c=>
+    fetch(`http://localhost:5000/api/chapters/course/${c.id}`,{
+      headers:{'Authorization':`Bearer ${token}`}
+    }).then(r=>r.json()).catch(()=>[])
+  )).then(results=>{
+    const progressMap={};
+    courses.forEach((c,i)=>{
+      const chapList=Array.isArray(results[i])?results[i]:[];
+progressMap[c.id]={done:chapList.filter(ch=>ch.status==='Completed').length,total:c.chapters||1};    });
+    setAllChapProgress(progressMap);
+  });
+},[courses]);
               const [newCourse,setNewCourse]=useState({name:'',code:'',class:'',chapters:'',desc:'',status:'Active'});
               const [editingCourse,setEditingCourse]=useState(null);
               const [selCourse,setSelCourse]=useState(null);
               const [chapters,setChapters]=useState({});
+              const [allChapProgress,setAllChapProgress]=useState({});
 useEffect(()=>{
-  if(!selCourse) return;
+  if(!selCourse?.id) return;
   const token = localStorage.getItem('token');
   fetch(`http://localhost:5000/api/chapters/course/${selCourse.id}`,{
     headers:{'Authorization':`Bearer ${token}`}
@@ -1578,7 +1646,7 @@ useEffect(()=>{
       }
     })
     .catch(()=>{});
-},[selCourse]);
+},[selCourse?.id]);
               const [newChapter,setNewChapter]=useState({title:'',status:'Pending',notes:''});
 
               const addCourse=async()=>{
@@ -1641,25 +1709,34 @@ const updateCourse=async()=>{
 };
               const [uploadedFiles,setUploadedFiles]=useState({});
 useEffect(()=>{
-  if(!selCourse) return;
-  const token = localStorage.getItem('token');
+  if(!selCourse?.id) return;
+  const token=localStorage.getItem('token');
+  
+  // Chapters load karo
+  fetch(`http://localhost:5000/api/chapters/course/${selCourse.id}`,{
+    headers:{'Authorization':`Bearer ${token}`}
+  }).then(r=>r.json()).then(data=>{
+    if(Array.isArray(data)){
+      setChapters(p=>({...p,[selCourse.id]:data.map(c=>({id:c._id,title:c.title,status:c.status,notes:c.notes}))}));
+    }
+  }).catch(()=>{});
+
+  // Materials load karo
   fetch(`http://localhost:5000/api/materials/course/${selCourse.id}`,{
     headers:{'Authorization':`Bearer ${token}`}
-  })
-    .then(res=>res.json())
-    .then(data=>{
-      if(Array.isArray(data)){
-        setUploadedFiles(p=>({...p,[selCourse.id]:data.map(m=>({
-          id:m._id,
-          name:m.name,
-          uploadedOn:new Date(m.uploadedOn).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
-          size:formatFileSize(m.fileSize),
-          filePath:m.filePath
-        }))}));
-      }
-    })
-    .catch(()=>{});
-},[selCourse]);
+  }).then(r=>r.json()).then(data=>{
+    if(Array.isArray(data)){
+      setUploadedFiles(p=>({...p,[selCourse.id]:data.map(m=>({
+        id:m._id,
+        name:m.name,
+        uploadedOn:new Date(m.uploadedOn).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
+        size:formatFileSize(m.fileSize),
+        filePath:m.filePath
+      }))}));
+    }
+  }).catch(()=>{});
+
+},[selCourse?.id]);
 const [newUpload,setNewUpload]=useState({name:'',file:null,fileName:''});
 const formatFileSize=(bytes)=>{
   if(!bytes || bytes===0) return '—';
@@ -1674,6 +1751,7 @@ const handleFileUpload=(e)=>{
   showToast(`📎 ${f.name} selected — ready to upload`);
 };
 const uploadFile=async()=>{
+  console.log('DEBUG selCourse:', selCourse);
   if(!newUpload.fileName){showToast('Select a PDF file first','⚠');return;}
   if(!selCourse){showToast('Select a course first','⚠');return;}
   const token = localStorage.getItem('token');
@@ -1733,8 +1811,27 @@ const deleteUpload=async(fileId)=>{
     const id = data._id || Date.now();
     setChapters(p=>({...p,[selCourse.id]:[...(p[selCourse.id]||[]),{id,title:newChapter.title,status:newChapter.status,notes:newChapter.notes}]}));
     showToast('Chapter added!');
+    // Chapters dobara load karo
+fetch(`http://localhost:5000/api/chapters/course/${selCourse.id}`,{
+  headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
+}).then(r=>r.json()).then(data=>{
+  if(Array.isArray(data)){
+    setChapters(p=>({...p,[selCourse.id]:data.map(c=>({id:c._id,title:c.title,status:c.status,notes:c.notes}))}));
+  }
+}).catch(()=>{});
+// Progress bar update karo
+fetch('http://localhost:5000/api/courses',{
+  headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
+}).then(r=>r.json()).then(data=>{
+  if(Array.isArray(data)) setRealCourses(data);
+}).catch(()=>{});
+    fetch('http://localhost:5000/api/courses',{
+  headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
+}).then(r=>r.json()).then(data=>{
+  if(Array.isArray(data)) setRealCourses(data);
+}).catch(()=>{});
   }catch(e){
-    showToast('⚠️ Backend save nahi hua');
+    showToast('⚠️ Backend not saved');
   }
   setNewChapter({title:'',status:'Pending',notes:''});
 };
@@ -1750,6 +1847,11 @@ const toggleChapStatus=async(chapId)=>{
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
       body:JSON.stringify({ status: newStatus })
     });
+fetch('http://localhost:5000/api/courses',{
+  headers:{'Authorization':`Bearer ${token}`}
+}).then(r=>r.json()).then(data=>{
+  if(Array.isArray(data)) setRealCourses(data);
+}).catch(()=>{});
   }catch(e){}
 };
 const deleteChap=async(chapId)=>{
@@ -1780,9 +1882,9 @@ const deleteChap=async(chapId)=>{
                     {courses.length===0&&<div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'20px 0'}}>No courses assigned yet. Contact admin to add courses.</div>}
                     <table className="mt"><thead><tr><th>Course</th><th>Class</th><th>Progress</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody>{courses.map(c=>{
-                      const cl=chapters[c.id]||[];
-                      const done=cl.filter(x=>x.status==='Completed').length;
-                      const total=cl.length||c.chapters||1;
+                      const prog=allChapProgress[c.id]||{done:0,total:c.chapters||1};
+                      const done=prog.done;
+                      const total=prog.total;
                       const pct=Math.round((done/total)*100);
                       return(<tr key={c.id}>
                         <td><div style={{fontWeight:600}}>{c.name}</div><div style={{fontSize:10,color:'rgba(255,255,255,0.3)'}}>{c.desc}</div></td>
@@ -1790,6 +1892,8 @@ const deleteChap=async(chapId)=>{
                         <td>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:4,height:6}}>
+                              {console.log('course:', c.name, 'done:', done, 'total:', total, 'pct:', pct)}
+
                               <div style={{width:`${pct}%`,height:'100%',background:pct>=80?'#1D9E75':pct>=40?'#D4AC0D':'#2471A3',borderRadius:4,transition:'width 0.5s'}}/>
                             </div>
                             <span style={{fontSize:10,color:'rgba(255,255,255,0.5)',flexShrink:0}}>{done}/{total}</span>
@@ -1844,8 +1948,7 @@ const deleteChap=async(chapId)=>{
                       </div>
                       <div className="analy-card" style={{padding:'8px 16px',minWidth:80}}><div className="analy-val" style={{fontSize:18}}>{completed}</div><div className="analy-lab">Done</div></div>
                       <div className="analy-card" style={{padding:'8px 16px',minWidth:80}}><div className="analy-val" style={{fontSize:18,color:'#D4AC0D'}}>{inProg}</div><div className="analy-lab">In Progress</div></div>
-                      <div className="analy-card" style={{padding:'8px 16px',minWidth:80}}><div className="analy-val" style={{fontSize:18,color:'rgba(255,255,255,0.4)'}}>{chapList.length-completed-inProg}</div><div className="analy-lab">Pending</div></div>
-                    </div>
+<div className="analy-card" style={{padding:'8px 16px',minWidth:80}}><div className="analy-val" style={{fontSize:18,color:'rgba(255,255,255,0.4)'}}>{Math.max(0,(selCourse?.chapters||0)-completed-inProg)}</div><div className="analy-lab">Pending</div></div>                    </div>
 
                     <div className="card">
                       <div className="form-row" style={{marginBottom:10,padding:'8px',background:'rgba(127,119,221,0.06)',borderRadius:8,border:'1px solid rgba(127,119,221,0.15)'}}>

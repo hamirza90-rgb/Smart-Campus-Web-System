@@ -25,11 +25,8 @@ exports.addTeacher = async (req, res) => {
 
 exports.updateTeacher = async (req, res) => {
   try {
-    const { name, email, dept, phone, status, password } = req.body;
+    const { name, email, dept, phone, status } = req.body;
     const updateData = { name, email, dept, phone, status };
-    if (password && password.trim() !== '') {
-      updateData.password = password;
-    }
     const teacher = await Teacher.findByIdAndUpdate(
       req.params.id,
       { $set: updateData },

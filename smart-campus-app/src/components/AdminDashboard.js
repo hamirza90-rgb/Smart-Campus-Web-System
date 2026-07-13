@@ -107,6 +107,17 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   const [editingResult,setEditingResult]=useState(null);
   const [showAddResult,setShowAddResult]=useState(false);
   const [newResult,setNewResult]=useState({cls:'',avgMarks:'',passRate:'',topStudent:'',distinctions:'',appeared:'',status:'Published'});
+  const [allStudentResults,setAllStudentResults]=useState([]);
+const [resultSearchTerm,setResultSearchTerm]=useState('');
+const [resultFilterClass,setResultFilterClass]=useState('All');
+const [resultFilterSubject,setResultFilterSubject]=useState('All');
+const [resultTab,setResultTab]=useState('overview');
+const [editingStudentResult,setEditingStudentResult]=useState(null);
+useEffect(()=>{
+  apiCall('/studentresults/all').then(data=>{
+    if(Array.isArray(data)) setAllStudentResults(data);
+  }).catch(()=>{});
+},[]);
 
   // ── Announcements ──
   const anns=adminAnns;
@@ -311,10 +322,50 @@ const addTtEntry=async()=>{
 };
 
   // ── Results Helpers ──
-  const totalAppeared=resultRows.reduce((a,r)=>a+r.appeared,0);
-  const avgScore=resultRows.length?Math.round(resultRows.reduce((a,r)=>a+r.avgMarks,0)/resultRows.length):0;
-  const avgPass=resultRows.length?Math.round(resultRows.reduce((a,r)=>a+r.passRate,0)/resultRows.length):0;
-  const totalDistinctions=resultRows.reduce((a,r)=>a+r.distinctions,0);
+  const totalAppeared=allStudentResults.length;
+  const autoClassResults=Object.entries(
+  allStudentResults.reduce((acc,r)=>{
+    const cls=r.class||'Unknown';
+    if(!acc[cls]) acc[cls]={cls,marks:[],students:{}};
+    acc[cls].marks.push(r.marks/r.total*100);
+    acc[cls].students[r.student?.name]=(acc[cls].students[r.student?.name]||0)+r.marks;
+    return acc;
+  },{})
+).map(([cls,data])=>({
+  cls,
+  avgMarks:Math.round(data.marks.reduce((a,b)=>a+b,0)/data.marks.length),
+  passRate:Math.round(data.marks.filter(m=>m>=40).length/data.marks.length*100),
+  topStudent:(()=>{
+  const uniqueStudents=[...new Set(allStudentResults.filter(r=>r.class===cls).map(r=>r.student?.name).filter(Boolean))];
+  const withAvg=uniqueStudents.map(name=>{
+    const recs=allStudentResults.filter(r=>r.student?.name===name&&r.class===cls);
+    const avg=recs.length?recs.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/recs.length:0;
+    return {name,avg};
+  });
+  return withAvg.sort((a,b)=>b.avg-a.avg)[0]?.name||'—';
+})(),
+  distinctions:Object.entries(data.students).filter(([name,marks])=>{
+  const studentRecords=allStudentResults.filter(r=>r.student?.name===name&&r.class===cls);
+  const avg=studentRecords.length?studentRecords.reduce((a,r)=>a+(r.marks/r.total*100),0)/studentRecords.length:0;
+  return avg>=80;
+}).length,
+  appeared:data.marks.length,
+  status:allStudentResults.filter(r=>r.class===cls).every(r=>r.isPublished===false)?'Draft':'Published',
+  id:'auto_'+cls
+}));
+  const topStudentsByClass=resultRows.map(r=>{
+  const classResults=allStudentResults.filter(x=>(x.class||'').toLowerCase().includes((r.cls||'').toLowerCase().split(' ')[0])||(r.cls||'').toLowerCase().includes((x.class||'').toLowerCase().split(' ')[0]));
+  const studentTotals={};
+  classResults.forEach(x=>{
+    if(!studentTotals[x.student?.name]) studentTotals[x.student?.name]=0;
+    studentTotals[x.student?.name]+=x.marks;
+  });
+  const top=Object.entries(studentTotals).sort((a,b)=>b[1]-a[1])[0];
+  return {...r, topStudent: top?top[0]:r.topStudent};
+});
+const avgScore=allStudentResults.length?Math.round(allStudentResults.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/allStudentResults.length):0;
+const avgPass=allStudentResults.length?Math.round(allStudentResults.filter(r=>r.total>0&&r.marks/r.total>=0.4).length/allStudentResults.length*100):0;
+const totalDistinctions=allStudentResults.filter(r=>r.total>0&&r.marks/r.total>=0.8).length;
 
   const saveEditResult=async()=>{
     try{
@@ -652,63 +703,187 @@ const sendAnn=async(scheduled=false)=>{
             )}
           </div>
 
-          {/* ── RESULTS ── */}
-          <div className={`panel ${activePane==='a-results'?'active':''}`}>
-            <div className="card">
-              <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Result Overview
-                <button className="add-btn" style={{margin:0,fontSize:10,marginLeft:'auto'}} onClick={()=>setShowAddResult(!showAddResult)}>+ Add Class</button>
-              </div>
-              <div className="analy-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:12}}>
-                <div className="analy-card"><div className="analy-val">{avgScore}%</div><div className="analy-lab">Avg Score</div></div>
-                <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>{avgPass}%</div><div className="analy-lab">Pass Rate</div></div>
-                <div className="analy-card"><div className="analy-val">{totalAppeared}</div><div className="analy-lab">Appeared</div></div>
-                <div className="analy-card"><div className="analy-val">{totalDistinctions}</div><div className="analy-lab">Distinctions</div></div>
-              </div>
+{/* ── RESULTS ── */}
+<div className={`panel ${activePane==='a-results'?'active':''}`}>
+  <div className="tab-row">
+    {[['overview','📊 Overview'],['students','👨‍🎓 Student Results'],['manage','⚙️ Manage']].map(([t,l])=>(
+      <button key={t} className={`tab-btn ${resultTab===t?'active':''}`} onClick={()=>setResultTab(t)}>{l}</button>
+    ))}
+  </div>
 
-              {showAddResult&&(
-                <div className="mini-form" style={{marginBottom:12}}>
-                  <div style={{color:'var(--white2)',fontSize:12,fontWeight:600,marginBottom:10}}>Add Class Result</div>
-                  <div className="form-row">
-                    <div className="f-group"><div className="f-lab">Class Name</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. ICS Sec B" value={newResult.cls} onChange={e=>setNewResult({...newResult,cls:e.target.value})}/></div>
-                    <div className="f-group"><div className="f-lab">Top Student</div><input className="f-inp" style={{width:'100%'}} placeholder="Student name" value={newResult.topStudent} onChange={e=>setNewResult({...newResult,topStudent:e.target.value})}/></div>
-                  </div>
-                  <div className="form-row">
-                    <div className="f-group"><div className="f-lab">Avg Marks %</div><input className="f-inp" style={{width:'100%'}} type="number" value={newResult.avgMarks} onChange={e=>setNewResult({...newResult,avgMarks:e.target.value})}/></div>
-                    <div className="f-group"><div className="f-lab">Pass Rate %</div><input className="f-inp" style={{width:'100%'}} type="number" value={newResult.passRate} onChange={e=>setNewResult({...newResult,passRate:e.target.value})}/></div>
-                    <div className="f-group"><div className="f-lab">Appeared</div><input className="f-inp" style={{width:'100%'}} type="number" value={newResult.appeared} onChange={e=>setNewResult({...newResult,appeared:e.target.value})}/></div>
-                    <div className="f-group"><div className="f-lab">Distinctions</div><input className="f-inp" style={{width:'100%'}} type="number" value={newResult.distinctions} onChange={e=>setNewResult({...newResult,distinctions:e.target.value})}/></div>
-                  </div>
-                  <div style={{display:'flex',gap:8}}><button className="d-btn d-btn-green" onClick={addResultRow}>Add</button><button className="d-btn d-btn-blue" onClick={()=>setShowAddResult(false)}>Cancel</button></div>
-                </div>
-              )}
-
-              {editingResult&&(
-                <div className="mini-form" style={{marginBottom:12,background:'rgba(36,113,163,0.08)',border:'1px solid rgba(36,113,163,0.25)'}}>
-                  <div style={{color:'var(--white2)',fontSize:12,fontWeight:600,marginBottom:10}}>✏️ Edit: {editingResult.cls}</div>
-                  <div className="form-row">
-                    <div className="f-group"><div className="f-lab">Class</div><input className="f-inp" style={{width:'100%'}} value={editingResult.cls} onChange={e=>setEditingResult({...editingResult,cls:e.target.value})}/></div>
-                    <div className="f-group"><div className="f-lab">Top Student</div><input className="f-inp" style={{width:'100%'}} value={editingResult.topStudent} onChange={e=>setEditingResult({...editingResult,topStudent:e.target.value})}/></div>
-                  </div>
-                  <div className="form-row">
-                    <div className="f-group"><div className="f-lab">Avg Marks %</div><input className="f-inp" style={{width:'100%'}} type="number" value={editingResult.avgMarks} onChange={e=>setEditingResult({...editingResult,avgMarks:Number(e.target.value)})}/></div>
-                    <div className="f-group"><div className="f-lab">Pass Rate %</div><input className="f-inp" style={{width:'100%'}} type="number" value={editingResult.passRate} onChange={e=>setEditingResult({...editingResult,passRate:Number(e.target.value)})}/></div>
-                  </div>
-                  <div className="f-group"><div className="f-lab">Status</div><select className="d-select" style={{marginBottom:0}} value={editingResult.status} onChange={e=>setEditingResult({...editingResult,status:e.target.value})}><option>Published</option><option>Draft</option><option>Under Review</option></select></div>
-                  <div style={{display:'flex',gap:8,marginTop:8}}><button className="d-btn d-btn-green" onClick={saveEditResult}>✓ Save</button><button className="d-btn d-btn-blue" onClick={()=>setEditingResult(null)}>Cancel</button></div>
-                </div>
-              )}
-
-              <table className="mt"><thead><tr><th>Class</th><th>Avg Marks</th><th>Pass %</th><th>Top Student</th><th>Distinctions</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody>{resultRows.map(r=>(<tr key={r.id}>
-                <td>{r.cls}</td><td>{r.avgMarks}%</td><td><span className="badge bg">{r.passRate}%</span></td><td>{r.topStudent}</td><td>{r.distinctions}</td>
-                <td><span className={`badge ${r.status==='Published'?'bg':'ba'}`}>{r.status}</span></td>
-                <td><div style={{display:'flex',gap:4}}>
-                  <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>setEditingResult({...r})}>Edit</button>
-                  <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>deleteResult(r.id)}>Delete</button>
-                </div></td>
-              </tr>))}</tbody></table>
-            </div>
+  {resultTab==='overview'&&(
+    <div className="card">
+      <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Result Overview
+        <button className="add-btn" style={{margin:0,fontSize:10,marginLeft:'auto'}} onClick={()=>setShowAddResult(!showAddResult)}>+ Add Class</button>
+      </div>
+      <div className="analy-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:12}}>
+        <div className="analy-card"><div className="analy-val">{avgScore}%</div><div className="analy-lab">Avg Score</div></div>
+        <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>{avgPass}%</div><div className="analy-lab">Pass Rate</div></div>
+        <div className="analy-card"><div className="analy-val">{totalAppeared}</div><div className="analy-lab">Appeared</div></div>
+        <div className="analy-card"><div className="analy-val">{totalDistinctions}</div><div className="analy-lab">Distinctions</div></div>
+      </div>
+      {showAddResult&&(
+        <div className="mini-form" style={{marginBottom:12}}>
+          <div style={{color:'var(--white2)',fontSize:12,fontWeight:600,marginBottom:10}}>Add Class Result</div>
+          <div className="form-row">
+            <div className="f-group"><div className="f-lab">Class Name</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. ICS Sec B" value={newResult.cls} onChange={e=>setNewResult({...newResult,cls:e.target.value})}/></div>
+            <div className="f-group"><div className="f-lab">Top Student</div><input className="f-inp" style={{width:'100%'}} placeholder="Student name" value={newResult.topStudent} onChange={e=>setNewResult({...newResult,topStudent:e.target.value})}/></div>
           </div>
+          <div className="form-row">
+            <div className="f-group"><div className="f-lab">Avg Marks %</div><input className="f-inp" style={{width:'100%'}} type="number" value={newResult.avgMarks} onChange={e=>setNewResult({...newResult,avgMarks:e.target.value})}/></div>
+            <div className="f-group"><div className="f-lab">Pass Rate %</div><input className="f-inp" style={{width:'100%'}} type="number" value={newResult.passRate} onChange={e=>setNewResult({...newResult,passRate:e.target.value})}/></div>
+            <div className="f-group"><div className="f-lab">Appeared</div><input className="f-inp" style={{width:'100%'}} type="number" value={newResult.appeared} onChange={e=>setNewResult({...newResult,appeared:e.target.value})}/></div>
+            <div className="f-group"><div className="f-lab">Distinctions</div><input className="f-inp" style={{width:'100%'}} type="number" value={newResult.distinctions} onChange={e=>setNewResult({...newResult,distinctions:e.target.value})}/></div>
+          </div>
+          <div style={{display:'flex',gap:8}}><button className="d-btn d-btn-green" onClick={addResultRow}>Add</button><button className="d-btn d-btn-blue" onClick={()=>setShowAddResult(false)}>Cancel</button></div>
+        </div>
+      )}
+      {editingResult&&(
+        <div className="mini-form" style={{marginBottom:12,background:'rgba(36,113,163,0.08)',border:'1px solid rgba(36,113,163,0.25)'}}>
+          <div style={{color:'var(--white2)',fontSize:12,fontWeight:600,marginBottom:10}}>✏️ Edit: {editingResult.cls}</div>
+          <div className="form-row">
+            <div className="f-group"><div className="f-lab">Class</div><input className="f-inp" style={{width:'100%'}} value={editingResult.cls} onChange={e=>setEditingResult({...editingResult,cls:e.target.value})}/></div>
+            <div className="f-group"><div className="f-lab">Top Student</div><input className="f-inp" style={{width:'100%'}} value={editingResult.topStudent} onChange={e=>setEditingResult({...editingResult,topStudent:e.target.value})}/></div>
+          </div>
+          <div className="form-row">
+            <div className="f-group"><div className="f-lab">Avg Marks %</div><input className="f-inp" style={{width:'100%'}} type="number" value={editingResult.avgMarks} onChange={e=>setEditingResult({...editingResult,avgMarks:Number(e.target.value)})}/></div>
+            <div className="f-group"><div className="f-lab">Pass Rate %</div><input className="f-inp" style={{width:'100%'}} type="number" value={editingResult.passRate} onChange={e=>setEditingResult({...editingResult,passRate:Number(e.target.value)})}/></div>
+          </div>
+          <div className="f-group"><div className="f-lab">Status</div><select className="d-select" style={{marginBottom:0}} value={editingResult.status} onChange={e=>setEditingResult({...editingResult,status:e.target.value})}><option>Published</option><option>Draft</option><option>Under Review</option></select></div>
+          <div style={{display:'flex',gap:8,marginTop:8}}><button className="d-btn d-btn-green" onClick={saveEditResult}>✓ Save</button><button className="d-btn d-btn-blue" onClick={()=>setEditingResult(null)}>Cancel</button></div>
+        </div>
+      )}
+      <table className="mt"><thead><tr><th>Class</th><th>Avg Marks</th><th>Pass %</th><th>Top Student</th><th>Distinctions</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>{autoClassResults.map(r=>(<tr key={r.id}>
+        <td>{r.cls}</td><td>{r.avgMarks}%</td><td><span className="badge bg">{r.passRate}%</span></td><td>{r.topStudent}</td><td>{r.distinctions}</td>
+        <td><span className={`badge ${r.status==='Published'?'bg':'ba'}`}>{r.status}</span></td>
+        <td><div style={{display:'flex',gap:4}}>
+          <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>setEditingResult({...r})}>Edit</button>
+          <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>deleteResult(r.id)}>Delete</button>
+        </div></td>
+      </tr>))}</tbody></table>
+    </div>
+  )}
+
+  {resultTab==='students'&&(
+    <div className="card">
+      <div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>Student Results
+        <span style={{marginLeft:'auto',fontSize:10,color:'rgba(255,255,255,0.3)'}}>{allStudentResults.length} records</span>
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+  <select className="d-select" style={{marginBottom:0,flex:1}} value={resultFilterClass} onChange={e=>setResultFilterClass(e.target.value)}>
+    <option value="All">— All Classes —</option>
+    {[...new Set(allStudentResults.map(r=>r.class).filter(Boolean))].map(c=><option key={c}>{c}</option>)}
+  </select>
+  <select className="d-select" style={{marginBottom:0,flex:1}} value={resultFilterSubject} onChange={e=>setResultFilterSubject(e.target.value)}>
+    <option value="All">— All Subjects —</option>
+    {[...new Set(allStudentResults.map(r=>r.subject).filter(Boolean))].map(s=><option key={s}>{s}</option>)}
+  </select>
+  <select className="d-select" style={{marginBottom:0,flex:1}} value={resultSearchTerm} onChange={e=>setResultSearchTerm(e.target.value)}>
+    <option value="">— All Students —</option>
+    {[...new Set(allStudentResults.map(r=>r.student?.name).filter(Boolean))].map(n=><option key={n}>{n}</option>)}
+  </select>
+</div>
+      {editingStudentResult&&(
+        <div className="mini-form" style={{marginBottom:12,background:'rgba(36,113,163,0.08)',border:'1px solid rgba(36,113,163,0.25)'}}>
+          <div style={{color:'var(--white2)',fontSize:12,fontWeight:600,marginBottom:10}}>✏️ Edit Marks — {editingStudentResult.student?.name||'Student'}</div>
+          <div className="form-row">
+            <div className="f-group"><div className="f-lab">Marks</div><input className="f-inp" style={{width:'100%'}} type="number" value={editingStudentResult.marks} min={0} onChange={e=>setEditingStudentResult({...editingStudentResult,marks:Math.max(0,Number(e.target.value))})}/></div>
+            <div className="f-group"><div className="f-lab">Total</div><input className="f-inp" style={{width:'100%'}} type="number" value={editingStudentResult.total} onChange={e=>setEditingStudentResult({...editingStudentResult,total:Number(e.target.value)})}/></div>
+            <div className="f-group"><div className="f-lab">Subject</div><input className="f-inp" style={{width:'100%'}} value={editingStudentResult.subject||''} onChange={e=>setEditingStudentResult({...editingStudentResult,subject:e.target.value})}/></div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="d-btn d-btn-green" onClick={async()=>{
+              try{
+                await apiCall(`/studentresults/update/${editingStudentResult._id}`,'PUT',{marks:editingStudentResult.marks,total:editingStudentResult.total,subject:editingStudentResult.subject});
+                setAllStudentResults(prev=>prev.map(r=>r._id===editingStudentResult._id?{...r,...editingStudentResult}:r));
+                showToast('✅ Result updated!');
+              }catch(e){showToast('Error updating');}
+              setEditingStudentResult(null);
+            }}>✓ Save</button>
+            <button className="d-btn d-btn-blue" onClick={()=>setEditingStudentResult(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      <table className="mt">
+        <thead><tr><th>Student</th><th>Class</th><th>Subject</th><th>Exam</th><th>Marks</th><th>Total</th><th>%</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          {allStudentResults
+            .filter(r=>{
+              const matchSearch=!resultSearchTerm||r.student?.name?.toLowerCase().includes(resultSearchTerm.toLowerCase());
+              const matchClass=resultFilterClass==='All'||r.class===resultFilterClass;
+              const matchSubject=resultFilterSubject==='All'||r.subject===resultFilterSubject;
+              return matchSearch&&matchClass&&matchSubject;
+            })
+            .map(r=>{
+              const pct=r.total>0?Math.round(r.marks/r.total*100):0;
+              const pass=pct>=40;
+              return(
+                <tr key={r._id}>
+                  <td style={{fontWeight:600}}>{r.student?.name||'—'}</td>
+                  <td style={{fontSize:10}}>{r.class||'—'}</td>
+                  <td style={{fontSize:11}}>{r.subject||'—'}</td>
+                  <td style={{fontSize:10}}>{r.examName||r.examType||'—'}</td>
+                  <td style={{fontWeight:600,color:'#60a5fa'}}>{r.marks}</td>
+                  <td style={{color:'rgba(255,255,255,0.4)'}}>{r.total}</td>
+                  <td><span style={{fontWeight:600,color:pct>=80?'#4ade80':pct>=40?'#fbbf24':'#f87171'}}>{pct}%</span></td>
+                  <td><span className={`badge ${pass?'bg':'br'}`}>{pass?'Pass':'Fail'}</span></td>
+                  <td><div style={{display:'flex',gap:4}}>
+                    <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>setEditingStudentResult({...r})}>✎ Edit</button>
+                    <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 6px'}} onClick={async()=>{
+                      try{
+                        await apiCall(`/studentresults/update/${r._id}`,'DELETE');
+                        setAllStudentResults(prev=>prev.filter(x=>x._id!==r._id));
+                        showToast('Deleted.');
+                      }catch(e){showToast('Error deleting');}
+                    }}>🗑</button>
+                  </div></td>
+                </tr>
+              );
+            })}
+        </tbody>
+      </table>
+      {allStudentResults.length===0&&<div style={{color:'rgba(255,255,255,0.25)',textAlign:'center',padding:'20px 0',fontSize:12}}>No student results yet. Teachers se results enter karwayein.</div>}
+    </div>
+  )}
+
+  {resultTab==='manage'&&(
+    <div className="card">
+      <div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>Publish / Unpublish Results</div>
+      {autoClassResults.map(r=>(
+        <div key={r.id} className="notif-item">
+          <div className="notif-dot" style={{background:r.status==='Published'?'#1D9E75':'#D4AC0D'}}></div>
+          <div style={{flex:1}}>
+            <div className="notif-text">{r.cls}</div>
+            <div className="notif-time">Avg: {r.avgMarks}% · Pass: {r.passRate}% · Top: {r.topStudent}</div>
+          </div>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <span className={`badge ${r.status==='Published'?'bg':'ba'}`}>{r.status}</span>
+            <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 8px'}} onClick={async()=>{
+  try{
+    const newStatus=r.status==='Published'?'Draft':'Published';
+    const isPublished=newStatus==='Published';
+    await apiCall(`/studentresults/publish/${encodeURIComponent(r.cls)}`,'PUT',{isPublished});
+    setResultRows(prev=>prev.map(row=>row.cls===r.cls?{...row,status:newStatus}:row));
+    setAllStudentResults(prev=>prev.map(sr=>sr.class===r.cls?{...sr,isPublished}:sr));
+    showToast(isPublished?'✅ Published!':'📴 Unpublished!');
+  }catch(e){showToast('Error');}
+}}>{r.status==='Published'?'📴 Unpublish':'📢 Publish'}</button>
+            <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 8px'}} onClick={()=>{
+              const rows=allStudentResults.filter(x=>x.class===r.cls);
+
+              const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Report — ${r.cls}</title></head><body style="font-family:Arial;padding:30px"><h2>Punjab Group of Colleges</h2><h3>Result Report — ${r.cls}</h3><table border="1" cellpadding="8" style="width:100%;border-collapse:collapse"><thead><tr><th>Student</th><th>Subject</th><th>Marks</th><th>Total</th><th>%</th><th>Result</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${x.student?.name||'—'}</td><td>${x.subject||'—'}</td><td>${x.marks}</td><td>${x.total}</td><td>${x.total>0?Math.round(x.marks/x.total*100):0}%</td><td>${x.total>0&&x.marks/x.total>=0.4?'Pass':'Fail'}</td></tr>`).join('')}</tbody></table></body></html>`;
+              const blob=new Blob([html],{type:'text/html'});
+              const url=URL.createObjectURL(blob);
+              const a=document.createElement('a');a.href=url;a.download=`Report_${r.cls.replace(/ /g,'_')}.html`;a.click();URL.revokeObjectURL(url);
+              showToast('📄 Report card downloaded!');
+            }}>📄 Report Card</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
           {/* ── ASSIGNMENTS ── */}
           <div className={`panel ${activePane==='a-assignments'?'active':''}`}>
@@ -1009,7 +1184,6 @@ const sendAnn=async(scheduled=false)=>{
   </select>
 </div>
                       <div className="f-group"><div className="f-lab">Total Chapters</div><input className="f-inp" style={{width:'100%'}} type="number" value={newAC.chapters} onChange={e=>setNewAC({...newAC,chapters:e.target.value})}/></div>
-                      <div className="f-group"><div className="f-lab">Done</div><input className="f-inp" style={{width:'100%'}} type="number" value={newAC.chapDone} onChange={e=>setNewAC({...newAC,chapDone:e.target.value})}/></div>
                     </div>
                     <div style={{display:'flex',gap:8}}><button className="d-btn d-btn-green" onClick={saveAC}>{editAC?'💾 Update':'➕ Add'}</button><button className="d-btn d-btn-blue" onClick={()=>{setEditAC(null);setAdminCourseTab('list');}}>Cancel</button></div>
                   </div>

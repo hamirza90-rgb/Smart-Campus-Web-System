@@ -13,9 +13,27 @@ exports.getStudentResults = async (req, res) => {
 // Add a new result (used by Admin/Teacher)
 exports.addStudentResult = async (req, res) => {
   try {
-    const { student, examName, subject, marks, total } = req.body;
-    const result = await StudentResult.create({ student, examName, subject, marks, total });
-    res.status(201).json({ message: 'Result added', result });
+    const { student, examName, subject, marks, total, class: cls, examType } = req.body;
+    
+    const result = await StudentResult.findOneAndUpdate(
+      { 
+        student: student, 
+        examName: examName||examType, 
+        subject: subject 
+      },
+      { 
+        student, 
+        examName: examName||examType, 
+        subject, 
+        marks, 
+        total,
+        class: cls,
+        examType: examType||examName
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    
+    res.status(201).json({ message: 'Result saved', result });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }

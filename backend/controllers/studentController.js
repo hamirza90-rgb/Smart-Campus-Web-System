@@ -4,7 +4,11 @@ const jwt = require('jsonwebtoken');
 // Get all students
 exports.getAllStudents = async (req, res) => {
   try {
-    const students = await Student.find();
+    const filter = {};
+    if (req.query.dept) {
+      filter.dept = { $regex: new RegExp(req.query.dept, 'i') };
+    }
+    const students = await Student.find(filter);
     res.status(200).json(students);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
