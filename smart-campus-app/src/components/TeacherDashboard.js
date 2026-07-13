@@ -103,15 +103,20 @@ useEffect(()=>{
       if (Array.isArray(data) && data.length > 0) {
         const myClassNames = [...new Set(realCourses.map(c=>c.class))];
         const myStudents = data.filter(s => myClassNames.includes(s.dept));
-        setStudents(myStudents.map(s => ({
-          _id: s._id,
-          name: s.name,
-          roll: s.roll,
-          attend: s.attend || 0,
-          marks: s.marks || 0,
-          grade: s.grade || 'N/A',
-          dept: s.dept
-        })));
+        setStudents(prev=>{
+          const mapped=myStudents.map(s => ({
+            _id: s._id,
+            name: s.name,
+            roll: s.roll,
+            attend: s.attend || 0,
+            marks: s.marks || 0,
+            grade: s.grade || 'N/A',
+            dept: s.dept
+          }));
+          const sameLength=prev.length===mapped.length;
+          const sameIds=sameLength&&prev.every((p,i)=>p._id===mapped[i]._id);
+          return sameIds?prev:mapped;
+        });
       }
     })
     .catch(() => {});
@@ -1212,24 +1217,29 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
   }
 },[realCourses]);
               const [totalMarks,setTotalMarks]=useState(()=>parseInt(localStorage.getItem(`totalMarks_${examClass}`))||100);
+              const [examTypeCommitted,setExamTypeCommitted]=useState(examType);
+              const [examClassCommitted,setExamClassCommitted]=useState(examClass);
+              const isEditingRef=useRef(false);
               const [examSubject,setExamSubject]=useState('');
               const [resultRows,setResultRows]=useState(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
   
              useEffect(()=>{
   const filtered=students.filter(s=>{
     const sDept=(s.dept||'').toLowerCase().trim();
-    const eClass=(examClass||'').toLowerCase().trim();
+    const eClass=(examClassCommitted||'').toLowerCase().trim();
     return eClass===''||sDept===eClass||sDept.includes(eClass)||eClass.includes(sDept);
   });
   if(filtered.length===0) return;
   const token=localStorage.getItem('token');
+  isEditingRef.current=false;
   Promise.all(filtered.map(s=>
     fetch(`http://localhost:5000/api/studentresults/${s._id}`,{
       headers:{'Authorization':`Bearer ${token}`}
     }).then(r=>r.json()).catch(()=>[])
   )).then(results=>{
+    if(isEditingRef.current) return;
     const rows=filtered.map((s,i)=>{
-      const res=Array.isArray(results[i])?results[i].find(r=>r.examName===examType):null;
+      const res=Array.isArray(results[i])?results[i].find(r=>r.examName===examTypeCommitted):null;
       return {
         _id:s._id,
         name:s.name,
@@ -1240,17 +1250,17 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
       };
     });
     setResultRows(rows);
-    const savedSubject=localStorage.getItem(`subject_${examClass}_${examType}`);
+    const savedSubject=localStorage.getItem(`subject_${examClassCommitted}_${examTypeCommitted}`);
 if(savedSubject) setExamSubject(savedSubject);
     if(rows[0]?.subject) setExamSubject(rows[0].subject);
   });
-},[students,examClass,examType]);
+},[students,examClassCommitted,examTypeCommitted]);
               const [showAddRow,setShowAddRow]=useState(false);
               const [newRow,setNewRow]=useState({name:'',roll:'',marks:0});
               const [editIdx,setEditIdx]=useState(null);
               const [editRow,setEditRow]=useState(null);
               const calcGrade=(m,t)=>{ const p=t>0?m/t*100:0; if(p>=90)return'A+'; if(p>=80)return'A'; if(p>=70)return'B+'; if(p>=60)return'B'; if(p>=50)return'C'; if(p>=40)return'D'; return'F'; };
-              const updateMark=(i,val)=>{ setResultRows(prev=>{ const r=[...prev]; const m=Math.min(Number(val),totalMarks); r[i]={...r[i],marks:isNaN(m)?0:m,grade:calcGrade(isNaN(m)?0:m,totalMarks),subject:examSubject}; const key=`results_${examClass}_${examType}`; localStorage.setItem(key,JSON.stringify(r)); return r; }); };
+              const updateMark=(i,val)=>{ isEditingRef.current=true; setResultRows(prev=>{ const r=[...prev]; const m=Math.min(Number(val),totalMarks); r[i]={...r[i],marks:isNaN(m)?0:m,grade:calcGrade(isNaN(m)?0:m,totalMarks),subject:examSubject}; const key=`results_${examClass}_${examType}`; localStorage.setItem(key,JSON.stringify(r)); return r; }); };
               const addRow=()=>{ if(!newRow.name.trim()){ showToast('Enter student name','⚠'); return; } const m=Math.min(Number(newRow.marks)||0,totalMarks); setResultRows(prev=>[...prev,{name:newRow.name,roll:newRow.roll||`NEW-${Date.now()}`,marks:m,grade:calcGrade(m,totalMarks)}]); setNewRow({name:'',roll:'',marks:0}); setShowAddRow(false); showToast('Student added to result!'); };
               const deleteRow=(i)=>{ setResultRows(prev=>prev.filter((_,idx)=>idx!==i)); showToast('Student removed from result.','🗑'); };
               const startEdit=(i)=>{ setEditIdx(i); setEditRow({...resultRows[i],subject:resultRows[i].subject||''}); };
@@ -1340,15 +1350,15 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                   <div className="form-row" style={{marginBottom:12,gap:12}}>
                   <div style={{flex:1}}>
   <div className="f-lab">Subject</div>
-<input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. Mathematics, Physics..." value={examSubject} onChange={e=>{const val=e.target.value;setExamSubject(val);localStorage.setItem(`subject_${examClass}_${examType}`,val);setResultRows(prev=>prev.map(r=>({...r,subject:val})));}}/>
+  <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. Mathematics, Physics..." value={examSubject} onChange={e=>{isEditingRef.current=true;const val=e.target.value;setExamSubject(val);localStorage.setItem(`subject_${examClass}_${examType}`,val);setResultRows(prev=>prev.map(r=>({...r,subject:val})));}}/>
 </div>
                     <div style={{flex:1}}>
                       <div className="f-lab">Exam Type (type anything)</div>
-                     <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. December Test, Phase 1, Quiz..." value={examType} onChange={e=>{setExamType(e.target.value);localStorage.setItem(`examType_${examClass}`,e.target.value);}}/>
+<input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. December Test, Phase 1, Quiz..." value={examType} onChange={e=>{setExamType(e.target.value);localStorage.setItem(`examType_${examClass}`,e.target.value);}} onBlur={()=>{setExamTypeCommitted(examType);setExamClassCommitted(examClass);}}/>
                     </div>
                     <div style={{flex:1}}>
                       <div className="f-lab">Class (type or pick)</div>
-                      <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. FSc Pre-Eng Sec A" value={examClass} onChange={e=>setExamClass(e.target.value)} list="class-list-res"/>
+                      <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. FSc Pre-Eng Sec A" value={examClass} onChange={e=>setExamClass(e.target.value)} onBlur={()=>{setExamTypeCommitted(examType);setExamClassCommitted(examClass);}} list="class-list-res"/>
                       <datalist id="class-list-res">{myClasses.map(c=><option key={c.name} value={c.name}/>)}</datalist>
                     </div>
                     <div style={{width:110}}>
@@ -1912,7 +1922,6 @@ const deleteChap=async(chapId)=>{
                         <td><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
           <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('outline');}}>📋 Outline</button>
           <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('upload');}}>📤 Upload PDF</button>
-          <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{if(window.confirm(`Delete course "${c.name}"? This cannot be undone.`))deleteCourse(c.id);}}>🗑 Delete</button>
         </div></td>
                       </tr>);
                     })}</tbody></table>

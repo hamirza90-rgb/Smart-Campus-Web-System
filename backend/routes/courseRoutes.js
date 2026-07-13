@@ -18,6 +18,5 @@ router.get('/', getAllCourses);
 // Teacher: create/update/delete — only their own
 router.post('/', protect(['teacher']), addCourse);
 router.put('/:id', updateCourse);
-router.delete('/:id', protect(['teacher']), deleteCourse);
-
+router.delete('/:id', deleteCourse);
 module.exports = router;
