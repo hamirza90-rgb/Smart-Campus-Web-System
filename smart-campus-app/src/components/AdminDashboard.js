@@ -14,8 +14,30 @@ const apiCall = async (endpoint, method = 'GET', body = null) => {
     }
   };
   if (body) options.body = JSON.stringify(body);
+  const apiCall = async (endpoint, method = 'GET', body = null) => {
+  const token = getToken();
+  console.log('TOKEN BEING SENT:', token);   // 👈 ye line add karein
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  };
+  if (body) options.body = JSON.stringify(body);
   const res = await fetch(`${API}${endpoint}`, options);
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Request failed');
+  }
+  return data;
+};
+  const res = await fetch(`${API}${endpoint}`, options);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Request failed');
+  }
+  return data;
 };
 
 function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChangelog,setTtChangelog,adminAnns,setAdminAnns}){
@@ -1105,7 +1127,7 @@ const sendAnn=async(scheduled=false)=>{
 }, [allStudents]);
               const [editAC,setEditAC]=useState(null);
               const saveAC=async()=>{
-  if(!newAC.name||!newAC.class){showToast('Fill Course Name and Class');return;}
+  if(!newAC.name?.trim()||!newAC.class?.trim()){showToast('Please fill Course Name and Class properly');return;}
   const payload={
     name:newAC.name,
     teacher:newAC.teacher,

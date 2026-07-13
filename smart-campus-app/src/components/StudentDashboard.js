@@ -155,7 +155,7 @@ useEffect(()=>{
   const isNotifRead=(n)=>n._src?extReadIds.has(n.id):n.read;
   const unread=allNotifs.filter(n=>!isNotifRead(n)).length;
   // Student timetable from per-class store
-  const myTimetable=(classTimetables&&classTimetables[studentClass])||initMockData.student.timetable;
+  const myTimetable=(classTimetables&&classTimetables[studentClass])||[];
   const myTtChangelog=(ttChangelog||[]).filter(c=>c.cls===studentClass);
 
   const showToast=(msg,icon='✓')=>{ setToast({msg,icon}); setTimeout(()=>setToast(null),3000); };

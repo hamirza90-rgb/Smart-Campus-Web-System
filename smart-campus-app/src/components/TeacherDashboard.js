@@ -5,8 +5,8 @@ import { PGCLogo, Toast } from './homepage';
 
 function TeacherDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,teacherNotifs,setTeacherNotifs}){
   const [activePane,setActivePane]=useState('t-home');
+  const [attClass,setAttClass]=useState('');
   const [toast,setToast]=useState(null);
-const [attClass,setAttClass]=useState('FSc Pre-Eng Sec B');
   const [examSubject,setExamSubject]=useState(()=>localStorage.getItem(`subject_${user?.dept||''}_Monthly Test`)||'');
   const getLocalDateStr=()=>{
   const d=new Date();
@@ -417,7 +417,16 @@ l: classStudents.filter(s=>manualData[s.name]==='L').length,
   setAttStep('submitted');
 };
               const resetAtt=()=>{setAttStep('setup');setScannedNames([]);setManualData({});setLastScanned(null);setStuSearch('');setAttSubject('');};
-
+// Add this as the very first line inside the Attendance IIFE, before the attStep checks:
+if(myClasses.length===0) return (
+  <div className="card" style={{textAlign:'center',padding:'40px 20px'}}>
+    <div style={{fontSize:40,marginBottom:10}}>📭</div>
+    <div style={{color:'#fff',fontSize:14,fontWeight:600,marginBottom:6}}>No Class Assigned</div>
+    <div style={{color:'rgba(255,255,255,0.4)',fontSize:12}}>
+      The Admin hasn't assigned you any course/class yet. Please contact the Admin so they can assign one via Course Management before you can take attendance.
+    </div>
+  </div>
+);
               // STEP 1 — SETUP
               if(attStep==='setup') return(
                 <>
