@@ -125,12 +125,15 @@ useEffect(()=>{
       apiCall(`/studentresults/${user.id}`)
         .then(data=>{
           if(Array.isArray(data)){
-            setRealResults(data.filter(r=>r.isPublished!==false).map(r=>({
-              subject:r.subject,
-              marks:r.marks,
-              total:r.total,
-              grade: r.marks>=90?'A+':r.marks>=80?'A':r.marks>=70?'B+':r.marks>=60?'B':r.marks>=50?'C':r.marks>=40?'D':'F'
-            })));
+            setRealResults(data.filter(r=>r.isPublished!==false).map(r=>{
+              const pct=r.total>0?Math.round(r.marks/r.total*100):0;
+              return{
+                subject:r.subject,
+                marks:r.marks,
+                total:r.total,
+                grade: pct>=90?'A+':pct>=80?'A':pct>=70?'B+':pct>=60?'B':pct>=50?'C':pct>=40?'D':'F'
+              };
+            }));
           } else setRealResults([]);
         })
         .catch(()=>setRealResults([]));
@@ -375,8 +378,8 @@ const d={
   results: realResults,
   attendance: { overall: attOverall, present: attPresent, absent: attAbsent, log: attLog, subjects: [] }
 };
-const avgMarks = d.results.length>0 ? Math.round(d.results.reduce((a,r)=>a+r.marks,0)/d.results.length) : 0;
-const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks)) : 0;
+const avgMarks = d.results.length>0 ? Math.round(d.results.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/d.results.length) : 0;
+const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.total>0?Math.round(r.marks/r.total*100):0)) : 0;
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
 
   return(
@@ -867,7 +870,11 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.marks))
           <div className={`panel ${activePane==='s-result'?'active':''}`}>
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Monthly Test Results — March 2026</div>
               <table className="mt"><thead><tr><th>Subject</th><th>Marks</th><th>Total</th><th>%</th><th>Grade</th><th>Status</th></tr></thead>
-              <tbody>{d.results.map((r,i)=>(<tr key={i}><td>{r.subject}</td><td>{r.marks}</td><td>{r.total}</td><td>{r.marks}%</td><td><span className={`badge ${getGradeColor(r.grade)}`}>{r.grade}</span></td><td><span className={`grade-pill ${r.marks>=40?'pass':'fail'}`}>{r.marks>=40?'Pass':'Fail'}</span></td></tr>))}</tbody></table>
+              <tbody>{d.results.map((r,i)=>{
+              const pct=r.total>0?Math.round(r.marks/r.total*100):0;
+              return(<tr key={i}><td>{r.subject}</td><td>{r.marks}</td><td>{r.total}</td><td>{pct}%</td><td><span className={`badge ${getGradeColor(r.grade)}`}>{r.grade}</span></td><td><span className={`grade-pill ${pct>=40?'pass':'fail'}`}>{pct>=40?'Pass':'Fail'}</span></td></tr>);
+            })}</tbody>
+              </table>
               <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>
                 <button className="d-btn d-btn-blue" onClick={()=>handleDownload('Result_Card_March2026.pdf')}>⬇ Download Result Card</button>
                 <button className="d-btn d-btn-primary" onClick={()=>handleDownload('Transcript_Laiba_Imtiaz.pdf')}>⬇ Download Transcript</button>
