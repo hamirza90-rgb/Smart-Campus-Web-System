@@ -31,7 +31,7 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [courses,setCourses]=useState([]);
   const [loadingCourses,setLoadingCourses]=useState(true);
   // Merge: local + admin + teacher notifications
-const studentClass = user.dept || 'FSc Pre-Eng Sec B';
+const studentClass = user.dept || '';
 const studentSection = user.section || 'N/A';
 const getProgramName=(cls)=>{
   const c=(cls||'').toLowerCase();
@@ -126,11 +126,12 @@ useEffect(()=>{
         .then(data=>{
           if(Array.isArray(data)){
             setRealResults(data.filter(r=>r.isPublished!==false).map(r=>{
-              const pct=r.total>0?Math.round(r.marks/r.total*100):0;
-              return{
+              const pct = r.total>0 ? Math.round((r.marks/r.total)*100) : 0;
+              return {
                 subject:r.subject,
                 marks:r.marks,
                 total:r.total,
+                percentage:pct,
                 grade: pct>=90?'A+':pct>=80?'A':pct>=70?'B+':pct>=60?'B':pct>=50?'C':pct>=40?'D':'F'
               };
             }));
@@ -378,8 +379,9 @@ const d={
   results: realResults,
   attendance: { overall: attOverall, present: attPresent, absent: attAbsent, log: attLog, subjects: [] }
 };
-const avgMarks = d.results.length>0 ? Math.round(d.results.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/d.results.length) : 0;
-const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.total>0?Math.round(r.marks/r.total*100):0)) : 0;
+const avgMarks = d.results.length>0 ? Math.round(d.results.reduce((a,r)=>a+(r.percentage??(r.total>0?(r.marks/r.total*100):0)),0)/d.results.length) : 0;
+const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.percentage??(r.total>0?Math.round(r.marks/r.total*100):0))) : 0;
+const overallGrade = d.results.length>0 ? (avgMarks>=90?'A+':avgMarks>=80?'A':avgMarks>=70?'B+':avgMarks>=60?'B':avgMarks>=50?'C':avgMarks>=40?'D':'F') : '—';
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
 
   return(
@@ -871,9 +873,9 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.total>0
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Monthly Test Results — March 2026</div>
               <table className="mt"><thead><tr><th>Subject</th><th>Marks</th><th>Total</th><th>%</th><th>Grade</th><th>Status</th></tr></thead>
               <tbody>{d.results.map((r,i)=>{
-              const pct=r.total>0?Math.round(r.marks/r.total*100):0;
-              return(<tr key={i}><td>{r.subject}</td><td>{r.marks}</td><td>{r.total}</td><td>{pct}%</td><td><span className={`badge ${getGradeColor(r.grade)}`}>{r.grade}</span></td><td><span className={`grade-pill ${pct>=40?'pass':'fail'}`}>{pct>=40?'Pass':'Fail'}</span></td></tr>);
-            })}</tbody>
+  const pct = r.percentage??(r.total>0?Math.round(r.marks/r.total*100):0);
+  return(<tr key={i}><td>{r.subject}</td><td>{r.marks}</td><td>{r.total}</td><td>{pct}%</td><td><span className={`badge ${getGradeColor(r.grade)}`}>{r.grade}</span></td><td><span className={`grade-pill ${pct>=40?'pass':'fail'}`}>{pct>=40?'Pass':'Fail'}</span></td></tr>);
+})}</tbody>
               </table>
               <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>
                 <button className="d-btn d-btn-blue" onClick={()=>handleDownload('Result_Card_March2026.pdf')}>⬇ Download Result Card</button>
@@ -883,8 +885,8 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.total>0
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#7F77DD'}}></div>Overall Summary</div>
               <div className="analy-grid">
                 <div className="analy-card"><div className="analy-val">{avgMarks}%</div><div className="analy-lab">Average</div></div>
-                <div className="analy-card"><div className="analy-val">{highestMarks}</div><div className="analy-lab">Highest</div></div>
-                <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>Pass</div><div className="analy-lab">Status</div></div>
+<div className="analy-card"><div className="analy-val">{highestMarks}%</div><div className="analy-lab">Highest</div></div>
+<div className="analy-card"><div className="analy-val" style={{color:avgMarks>=40?'#4ade80':'#f87171'}}>{avgMarks>=40?'Pass':'Fail'}</div><div className="analy-lab">Status</div></div>
               </div>
             </div>
           </div>
@@ -1165,20 +1167,39 @@ const highestMarks = d.results.length>0 ? Math.max(...d.results.map(r=>r.total>0
               <div className="analy-card"><div className="analy-val">{d.attendance.overall}%</div><div className="analy-lab">Attendance</div></div>
               <div className="analy-card"><div className="analy-val">{avgMarks}%</div><div className="analy-lab">Avg Marks</div></div>
               <div className="analy-card"><div className="analy-val">{d.assignments.filter(a=>a.status==='Graded').length}</div><div className="analy-lab">Graded</div></div>
-              <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>A</div><div className="analy-lab">Avg Grade</div></div>
+              <div className="analy-card"><div className="analy-val" style={{color:overallGrade==='F'?'#f87171':'#4ade80'}}>{overallGrade}</div><div className="analy-lab">Avg Grade</div></div>
             </div>
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>Subject-wise Performance</div>
-              <div className="chart-bar-wrap">
-                {d.results.map((r,i)=>{ const colors=['#2471A3','#7F77DD','#D4AC0D','#1D9E75','#C0392B','#7F77DD']; return(
-                  <div className="chart-row" key={r.subject}><span className="chart-label">{r.subject.substring(0,8)}</span><div className="chart-bar-bg"><div className="chart-bar-fill" style={{width:`${r.marks}%`,background:colors[i]}}><span style={{color:'rgba(255,255,255,0.85)'}}>{r.marks}%</span></div></div><span className="chart-val">{r.grade}</span></div>
-                ); })}
-              </div>
-            </div>
-            
-              <div className="card">
-  <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Assignment Progress</div>
-  {[['Submitted',d.assignments.filter(a=>a.status==='Graded').length,'#1D9E75'],['Pending',d.assignments.filter(a=>a.status==='Pending').length,'#C0392B'],['Draft',d.assignments.filter(a=>a.status==='Draft').length,'#D4AC0D']].map(([l,v,c])=>(<div className="pr" key={l}><span className="pl">{l}</span><div className="pb"><div className="pf" style={{width:`${(v/d.assignments.length)*100}%`,background:c}}/></div><span className="pv">{v}</span></div>))}
+  <div className="chart-bar-wrap">
+    {d.results.length===0&&<div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'16px 0'}}>No published results yet.</div>}
+    {d.results.map((r,i)=>{
+      const colors=['#2471A3','#7F77DD','#D4AC0D','#1D9E75','#C0392B','#7F77DD'];
+      const pct = r.percentage??(r.total>0?Math.round(r.marks/r.total*100):0);
+      return(
+        <div className="chart-row" key={r.subject}>
+          <span className="chart-label">{r.subject.substring(0,8)}</span>
+          <div className="chart-bar-bg"><div className="chart-bar-fill" style={{width:`${pct}%`,background:colors[i%colors.length]}}><span style={{color:'rgba(255,255,255,0.85)'}}>{pct}%</span></div></div>
+          <span className="chart-val">{r.grade}</span>
+        </div>
+      );
+    })}
+  </div>
 </div>
+            
+           <div className="card">
+  <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Assignment Progress</div>
+  {(()=>{
+    const total=d.assignments.length||1;
+    const rows=[
+      ['Graded',d.assignments.filter(a=>a.status==='Graded').length,'#1D9E75'],
+      ['Submitted',d.assignments.filter(a=>a.status==='Submitted').length,'#2471A3'],
+      ['Pending',d.assignments.filter(a=>a.status==='Pending').length,'#C0392B'],
+    ];
+    return rows.map(([l,v,c])=>(
+      <div className="pr" key={l}><span className="pl">{l}</span><div className="pb"><div className="pf" style={{width:`${(v/total)*100}%`,background:c}}/></div><span className="pv">{v}</span></div>
+    ));
+  })()}
+</div> 
           </div>
 
         </div>
