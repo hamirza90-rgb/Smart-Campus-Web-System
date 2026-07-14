@@ -210,7 +210,9 @@ useEffect(()=>{
 
   const filteredStudents=allStudents.filter(s=>
     s.name?.toLowerCase().includes(searchTerm.toLowerCase())||
-    s.roll?.toLowerCase().includes(searchTerm.toLowerCase())
+    s.roll?.toLowerCase().includes(searchTerm.toLowerCase())||
+    s.dept?.toLowerCase().includes(searchTerm.toLowerCase())||
+    s.fatherName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
   const filteredTeachers=allTeachers.filter(t=>
     t.name?.toLowerCase().includes(searchTerm.toLowerCase())||

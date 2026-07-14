@@ -3,17 +3,13 @@ import { useState, useEffect } from 'react';
 // ══ PGC LOGO ══
 function PGCLogo({size=32}){
   return(
-    <svg viewBox="0 0 40 40" width={size} height={size} className="pgc-logo-svg">
-      <rect x="4" y="38" width="32" height="2" rx="1" fill="white" opacity="0.5"/>
-      <rect x="6" y="20" width="28" height="18" rx="1" fill="white" opacity="0.08"/>
-      <rect x="8" y="22" width="4" height="14" rx="0.5" fill="white" opacity="0.7"/>
-      <rect x="18" y="22" width="4" height="14" rx="0.5" fill="white" opacity="0.7"/>
-      <rect x="28" y="22" width="4" height="14" rx="0.5" fill="white" opacity="0.7"/>
-      <polygon points="2,20 20,6 38,20" fill="white" opacity="0.9"/>
-      <rect x="2" y="19" width="36" height="2.5" rx="0.5" fill="#C0392B" opacity="0.85"/>
-      <line x1="20" y1="6" x2="20" y2="1" stroke="white" strokeWidth="1" opacity="0.6"/>
-      <polygon points="20,1 26,3 20,5" fill="#C0392B" opacity="0.9"/>
-    </svg>
+    <img 
+      src="/assets/pgc-logo.jpg" 
+      alt="PGC Logo" 
+      width={size} 
+      height={size} 
+      style={{objectFit:'contain',borderRadius:'4px'}}
+    />
   );
 }
 
@@ -101,7 +97,7 @@ useEffect(() => {
         <p className="hero-desc">A unified digital platform for students, teachers and administrators — attendance, assignments, results and more, all in one place.</p>
         <div className="hero-stats">
           {[
-  [liveStats.students!==null?`${liveStats.students}+`:'...','Students'],
+  [liveStats.students!==null?`${liveStats.students}`:'...','Students'],
   [liveStats.faculty!==null?`${liveStats.faculty}`:'...','Faculty'],
   [liveStats.classes!==null?`${liveStats.classes}`:'...','Classes'],
   [liveStats.passRate!==null?`${liveStats.passRate}%`:'...','Pass Rate']
@@ -142,7 +138,7 @@ useEffect(() => {
           </div>
           <div className="about-stats">
             {[
-  [liveStats.students!==null?`${liveStats.students}+`:'...','Students Enrolled'],
+  [liveStats.students!==null?`${liveStats.students}`:'...','Students Enrolled'],
   [liveStats.faculty!==null?`${liveStats.faculty}`:'...','Faculty Members'],
   [liveStats.classes!==null?`${liveStats.classes}`:'...','Classes Running'],
   [liveStats.passRate!==null?`${liveStats.passRate}%`:'...','Annual Pass Rate'],

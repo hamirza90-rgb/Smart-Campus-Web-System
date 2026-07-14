@@ -103,20 +103,15 @@ useEffect(()=>{
       if (Array.isArray(data) && data.length > 0) {
         const myClassNames = [...new Set(realCourses.map(c=>c.class))];
         const myStudents = data.filter(s => myClassNames.includes(s.dept));
-        setStudents(prev=>{
-          const mapped=myStudents.map(s => ({
-            _id: s._id,
-            name: s.name,
-            roll: s.roll,
-            attend: s.attend || 0,
-            marks: s.marks || 0,
-            grade: s.grade || 'N/A',
-            dept: s.dept
-          }));
-          const sameLength=prev.length===mapped.length;
-          const sameIds=sameLength&&prev.every((p,i)=>p._id===mapped[i]._id);
-          return sameIds?prev:mapped;
-        });
+        setStudents(myStudents.map(s => ({
+          _id: s._id,
+          name: s.name,
+          roll: s.roll,
+          attend: s.attend || 0,
+          marks: s.marks || 0,
+          grade: s.grade || 'N/A',
+          dept: s.dept
+        })));
       }
     })
     .catch(() => {});
@@ -422,16 +417,7 @@ l: classStudents.filter(s=>manualData[s.name]==='L').length,
   setAttStep('submitted');
 };
               const resetAtt=()=>{setAttStep('setup');setScannedNames([]);setManualData({});setLastScanned(null);setStuSearch('');setAttSubject('');};
-// Add this as the very first line inside the Attendance IIFE, before the attStep checks:
-if(myClasses.length===0) return (
-  <div className="card" style={{textAlign:'center',padding:'40px 20px'}}>
-    <div style={{fontSize:40,marginBottom:10}}>📭</div>
-    <div style={{color:'#fff',fontSize:14,fontWeight:600,marginBottom:6}}>No Class Assigned</div>
-    <div style={{color:'rgba(255,255,255,0.4)',fontSize:12}}>
-      The Admin hasn't assigned you any course/class yet. Please contact the Admin so they can assign one via Course Management before you can take attendance.
-    </div>
-  </div>
-);
+
               // STEP 1 — SETUP
               if(attStep==='setup') return(
                 <>
@@ -1217,29 +1203,24 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
   }
 },[realCourses]);
               const [totalMarks,setTotalMarks]=useState(()=>parseInt(localStorage.getItem(`totalMarks_${examClass}`))||100);
-              const [examTypeCommitted,setExamTypeCommitted]=useState(examType);
-              const [examClassCommitted,setExamClassCommitted]=useState(examClass);
-              const isEditingRef=useRef(false);
               const [examSubject,setExamSubject]=useState('');
               const [resultRows,setResultRows]=useState(students.map(s=>({_id:s._id,name:s.name,roll:s.roll,marks:s.marks,grade:s.grade})));
   
              useEffect(()=>{
   const filtered=students.filter(s=>{
     const sDept=(s.dept||'').toLowerCase().trim();
-    const eClass=(examClassCommitted||'').toLowerCase().trim();
+    const eClass=(examClass||'').toLowerCase().trim();
     return eClass===''||sDept===eClass||sDept.includes(eClass)||eClass.includes(sDept);
   });
   if(filtered.length===0) return;
   const token=localStorage.getItem('token');
-  isEditingRef.current=false;
   Promise.all(filtered.map(s=>
     fetch(`http://localhost:5000/api/studentresults/${s._id}`,{
       headers:{'Authorization':`Bearer ${token}`}
     }).then(r=>r.json()).catch(()=>[])
   )).then(results=>{
-    if(isEditingRef.current) return;
     const rows=filtered.map((s,i)=>{
-      const res=Array.isArray(results[i])?results[i].find(r=>r.examName===examTypeCommitted):null;
+      const res=Array.isArray(results[i])?results[i].find(r=>r.examName===examType):null;
       return {
         _id:s._id,
         name:s.name,
@@ -1250,17 +1231,17 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
       };
     });
     setResultRows(rows);
-    const savedSubject=localStorage.getItem(`subject_${examClassCommitted}_${examTypeCommitted}`);
+    const savedSubject=localStorage.getItem(`subject_${examClass}_${examType}`);
 if(savedSubject) setExamSubject(savedSubject);
     if(rows[0]?.subject) setExamSubject(rows[0].subject);
   });
-},[students,examClassCommitted,examTypeCommitted]);
+},[students,examClass,examType]);
               const [showAddRow,setShowAddRow]=useState(false);
               const [newRow,setNewRow]=useState({name:'',roll:'',marks:0});
               const [editIdx,setEditIdx]=useState(null);
               const [editRow,setEditRow]=useState(null);
               const calcGrade=(m,t)=>{ const p=t>0?m/t*100:0; if(p>=90)return'A+'; if(p>=80)return'A'; if(p>=70)return'B+'; if(p>=60)return'B'; if(p>=50)return'C'; if(p>=40)return'D'; return'F'; };
-              const updateMark=(i,val)=>{ isEditingRef.current=true; setResultRows(prev=>{ const r=[...prev]; const m=Math.min(Number(val),totalMarks); r[i]={...r[i],marks:isNaN(m)?0:m,grade:calcGrade(isNaN(m)?0:m,totalMarks),subject:examSubject}; const key=`results_${examClass}_${examType}`; localStorage.setItem(key,JSON.stringify(r)); return r; }); };
+              const updateMark=(i,val)=>{ setResultRows(prev=>{ const r=[...prev]; const m=Math.min(Number(val),totalMarks); r[i]={...r[i],marks:isNaN(m)?0:m,grade:calcGrade(isNaN(m)?0:m,totalMarks),subject:examSubject}; const key=`results_${examClass}_${examType}`; localStorage.setItem(key,JSON.stringify(r)); return r; }); };
               const addRow=()=>{ if(!newRow.name.trim()){ showToast('Enter student name','⚠'); return; } const m=Math.min(Number(newRow.marks)||0,totalMarks); setResultRows(prev=>[...prev,{name:newRow.name,roll:newRow.roll||`NEW-${Date.now()}`,marks:m,grade:calcGrade(m,totalMarks)}]); setNewRow({name:'',roll:'',marks:0}); setShowAddRow(false); showToast('Student added to result!'); };
               const deleteRow=(i)=>{ setResultRows(prev=>prev.filter((_,idx)=>idx!==i)); showToast('Student removed from result.','🗑'); };
               const startEdit=(i)=>{ setEditIdx(i); setEditRow({...resultRows[i],subject:resultRows[i].subject||''}); };
@@ -1350,15 +1331,15 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                   <div className="form-row" style={{marginBottom:12,gap:12}}>
                   <div style={{flex:1}}>
   <div className="f-lab">Subject</div>
-  <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. Mathematics, Physics..." value={examSubject} onChange={e=>{isEditingRef.current=true;const val=e.target.value;setExamSubject(val);localStorage.setItem(`subject_${examClass}_${examType}`,val);setResultRows(prev=>prev.map(r=>({...r,subject:val})));}}/>
+<input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. Mathematics, Physics..." value={examSubject} onChange={e=>{const val=e.target.value;setExamSubject(val);localStorage.setItem(`subject_${examClass}_${examType}`,val);setResultRows(prev=>prev.map(r=>({...r,subject:val})));}}/>
 </div>
                     <div style={{flex:1}}>
                       <div className="f-lab">Exam Type (type anything)</div>
-<input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. December Test, Phase 1, Quiz..." value={examType} onChange={e=>{setExamType(e.target.value);localStorage.setItem(`examType_${examClass}`,e.target.value);}} onBlur={()=>{setExamTypeCommitted(examType);setExamClassCommitted(examClass);}}/>
+                     <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. December Test, Phase 1, Quiz..." value={examType} onChange={e=>{setExamType(e.target.value);localStorage.setItem(`examType_${examClass}`,e.target.value);}}/>
                     </div>
                     <div style={{flex:1}}>
                       <div className="f-lab">Class (type or pick)</div>
-                      <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. FSc Pre-Eng Sec A" value={examClass} onChange={e=>setExamClass(e.target.value)} onBlur={()=>{setExamTypeCommitted(examType);setExamClassCommitted(examClass);}} list="class-list-res"/>
+                      <input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. FSc Pre-Eng Sec A" value={examClass} onChange={e=>setExamClass(e.target.value)} list="class-list-res"/>
                       <datalist id="class-list-res">{myClasses.map(c=><option key={c.name} value={c.name}/>)}</datalist>
                     </div>
                     <div style={{width:110}}>
@@ -1922,6 +1903,7 @@ const deleteChap=async(chapId)=>{
                         <td><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
           <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('outline');}}>📋 Outline</button>
           <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{setSelCourse(c);setCourseTab('upload');}}>📤 Upload PDF</button>
+          <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 7px'}} onClick={()=>{if(window.confirm(`Delete course "${c.name}"? This cannot be undone.`))deleteCourse(c.id);}}>🗑 Delete</button>
         </div></td>
                       </tr>);
                     })}</tbody></table>
@@ -2272,32 +2254,94 @@ const deleteChap=async(chapId)=>{
           {/* ANALYTICS */}
           <div className={`panel ${activePane==='t-perf'?'active':''}`}>
             {(()=>{
-              const [analyticsClass,setAnalyticsClass]=useState(myClasses[0]?.name||'FSc Pre-Eng Sec B');
-              const classStudents=students; 
-              // In real app, filter by class
-              const [realAttendance, setRealAttendance] = useState([]);
+              const [analyticsClass,setAnalyticsClass]=useState('');
+              useEffect(()=>{
+                if(!analyticsClass && myClasses.length>0) setAnalyticsClass(myClasses[0].name);
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+              },[myClasses]);
 
-useEffect(() => {
-  if(!analyticsClass) return;
-  const token = localStorage.getItem('token');
-  fetch(`http://localhost:5000/api/attendance/class/${encodeURIComponent(analyticsClass)}`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  })
-  .then(res => res.json())
-  .then(data => {
-    if(Array.isArray(data)) setRealAttendance(data);
-  })
-  .catch(() => {});
-}, [analyticsClass]);
-              const avgMarks=classStudents.length?Math.round(classStudents.reduce((a,s)=>a+s.marks,0)/classStudents.length):0;
-              const avgAttendance=classStudents.length?Math.round(classStudents.reduce((a,s)=>a+s.attend,0)/classStudents.length):0;
-              // Real attendance calculate karo
-const realAvgAtt = realAttendance.length > 0
-  ? Math.round(realAttendance.filter(r => r.status === 'P').length / realAttendance.length * 100)
-  : avgAttendance;
-              const passCount=classStudents.filter(s=>s.marks>=40).length;
-              const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-              const monthlyAtt=months.map((m,i)=>({month:m,pct:Math.max(60,Math.min(98,avgAttendance+Math.round(Math.sin(i)*8)))}));
+              const classStudents = students.filter(s=>s.dept===analyticsClass);
+
+              const [realAttendance, setRealAttendance] = useState([]);
+              useEffect(() => {
+                if(!analyticsClass) return;
+                const token = localStorage.getItem('token');
+                fetch(`http://localhost:5000/api/attendance/class/${encodeURIComponent(analyticsClass)}`, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                })
+                .then(res => res.json())
+                .then(data => { if(Array.isArray(data)) setRealAttendance(data); })
+                .catch(() => {});
+              }, [analyticsClass]);
+
+              // ── Har student ka real result data — same endpoint jo Results tab use karta hai ──
+              const [studentResultsMap, setStudentResultsMap] = useState({});
+              useEffect(()=>{
+                if(classStudents.length===0){ setStudentResultsMap({}); return; }
+                const token = localStorage.getItem('token');
+                Promise.all(classStudents.map(s=>
+                  fetch(`http://localhost:5000/api/studentresults/${s._id}`,{
+                    headers:{'Authorization':`Bearer ${token}`}
+                  }).then(r=>r.json()).catch(()=>[])
+                )).then(results=>{
+                  const map={};
+                  classStudents.forEach((s,i)=>{
+                    map[s._id] = Array.isArray(results[i]) ? results[i].filter(r=>r.isPublished!==false) : [];
+                  });
+                  setStudentResultsMap(map);
+                });
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+              },[analyticsClass, students.length]);
+
+              const getAttPct = (rollNo) => {
+                const recs = realAttendance.filter(r=>r.rollNo===rollNo);
+                if(recs.length===0) return null;
+                const present = recs.filter(r=>r.status==='P').length;
+                return Math.round((present/recs.length)*100);
+              };
+
+              const getMarksPct = (studentId) => {
+                const recs = studentResultsMap[studentId]||[];
+                if(recs.length===0) return null;
+                const avg = recs.reduce((a,r)=>a+(r.total>0?(r.marks/r.total*100):0),0)/recs.length;
+                return Math.round(avg);
+              };
+
+              const realAvgAtt = realAttendance.length>0
+                ? Math.round(realAttendance.filter(r=>r.status==='P').length/realAttendance.length*100)
+                : 0;
+
+              const allPercentages = classStudents
+                .map(s=>getMarksPct(s._id))
+                .filter(p=>p!==null);
+
+              const avgMarks = allPercentages.length>0
+                ? Math.round(allPercentages.reduce((a,p)=>a+p,0)/allPercentages.length)
+                : 0;
+
+              const passCount = classStudents.filter(s=>{
+                const pct = getMarksPct(s._id);
+                return pct!==null && pct>=40;
+              }).length;
+
+              const classGrade = allPercentages.length===0 ? '—' : (avgMarks>=90?'A+':avgMarks>=80?'A':avgMarks>=70?'B+':avgMarks>=60?'B':avgMarks>=50?'C':avgMarks>=40?'D':'F');
+
+              const monthlyAtt = (()=>{
+                const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const grouped={};
+                realAttendance.forEach(r=>{
+                  const dt=new Date(r.date);
+                  const key=monthNames[dt.getMonth()];
+                  if(!grouped[key]) grouped[key]={present:0,total:0};
+                  grouped[key].total++;
+                  if(r.status==='P') grouped[key].present++;
+                });
+                return monthNames.filter(m=>grouped[m]).map(m=>({
+                  month:m,
+                  pct: Math.round((grouped[m].present/grouped[m].total)*100)
+                }));
+              })();
+
               return(<>
                 {/* Class filter dropdown */}
                 <div style={{display:'flex',gap:12,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
@@ -2308,20 +2352,42 @@ const realAvgAtt = realAttendance.length > 0
                   <span style={{fontSize:10,color:'rgba(255,255,255,0.3)'}}>Real-time performance report</span>
                 </div>
 
+                {myClasses.length===0 ? (
+                  <div className="card" style={{textAlign:'center',padding:'30px 20px'}}>
+                    <div style={{fontSize:40,marginBottom:10}}>📭</div>
+                    <div style={{color:'#fff',fontSize:14,fontWeight:600,marginBottom:6}}>No Class Assigned</div>
+                    <div style={{color:'rgba(255,255,255,0.4)',fontSize:12}}>Admin ne abhi tak aapko koi class assign nahi ki.</div>
+                  </div>
+                ):(<>
                 <div className="analy-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
                   <div className="analy-card"><div className="analy-val">{realAvgAtt}%</div><div className="analy-lab">Avg Attendance</div></div>
-                  <div className="analy-card"><div className="analy-val">{avgMarks}</div><div className="analy-lab">Avg Marks</div></div>
+                  <div className="analy-card"><div className="analy-val">{avgMarks}%</div><div className="analy-lab">Avg Marks</div></div>
                   <div className="analy-card"><div className="analy-val">{passCount}/{classStudents.length}</div><div className="analy-lab">Pass / Total</div></div>
-                  <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>A</div><div className="analy-lab">Class Grade</div></div>
+                  <div className="analy-card"><div className="analy-val" style={{color:classGrade==='F'?'#f87171':classGrade==='—'?'rgba(255,255,255,0.3)':'#4ade80'}}>{classGrade}</div><div className="analy-lab">Class Grade</div></div>
                 </div>
 
                 <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>Student Performance — {analyticsClass}</div>
-                  <div className="chart-bar-wrap">{classStudents.map((s,i)=>{ const colors=['#2471A3','#7F77DD','#D4AC0D','#1D9E75','#C0392B','#7F77DD']; return(<div className="chart-row" key={s.name}><span className="chart-label">{s.name.split(' ')[0]}</span><div className="chart-bar-bg"><div className="chart-bar-fill" style={{width:`${s.marks}%`,background:colors[i%colors.length]}}><span style={{color:'rgba(255,255,255,0.9)'}}>{s.marks}%</span></div></div><span className="chart-val">{s.attend}%</span></div>); })}</div>
+                  <div className="chart-bar-wrap">
+                    {classStudents.length===0&&<div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'16px 0'}}>No students in this class.</div>}
+                    {classStudents.map((s,i)=>{
+                      const colors=['#2471A3','#7F77DD','#D4AC0D','#1D9E75','#C0392B','#7F77DD'];
+                      const marksPct = getMarksPct(s._id);
+                      const attPct = getAttPct(s.roll);
+                      return(
+                        <div className="chart-row" key={s.name}>
+                          <span className="chart-label">{s.name.split(' ')[0]}</span>
+                          <div className="chart-bar-bg"><div className="chart-bar-fill" style={{width:`${marksPct??0}%`,background:colors[i%colors.length]}}><span style={{color:'rgba(255,255,255,0.9)'}}>{marksPct??'No result'}{marksPct!==null?'%':''}</span></div></div>
+                          <span className="chart-val">{attPct??'—'}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Monthly attendance % chart */}
                 <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#1D9E75'}}></div>Monthly Attendance % — {analyticsClass}</div>
                   <div className="chart-bar-wrap">
+                    {monthlyAtt.length===0&&<div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'16px 0'}}>No attendance records yet for this class.</div>}
                     {monthlyAtt.map(({month,pct})=>(
                       <div className="chart-row" key={month}>
                         <span className="chart-label">{month}</span>
@@ -2336,6 +2402,7 @@ const realAvgAtt = realAttendance.length > 0
                   </div>
                   <div style={{fontSize:10,color:'rgba(255,255,255,0.28)',marginTop:6}}>🔴 Below 75% = Shortage risk &nbsp;|&nbsp; 🟢 Above 75% = Safe</div>
                 </div>
+                </>)}
               </>);
             })()}
           </div>
