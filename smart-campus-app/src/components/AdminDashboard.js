@@ -124,6 +124,15 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
   const [showAddResult,setShowAddResult]=useState(false);
   const [newResult,setNewResult]=useState({cls:'',avgMarks:'',passRate:'',topStudent:'',distinctions:'',appeared:'',status:'Published'});
   const [allStudentResults,setAllStudentResults]=useState([]);
+  
+  const [allAttendance,setAllAttendance]=useState([]);
+useEffect(()=>{
+  apiCall('/attendance/all')
+    .then(data=>{
+      if(Array.isArray(data)) setAllAttendance(data);
+    })
+    .catch(()=>{});
+},[]);
 const [resultSearchTerm,setResultSearchTerm]=useState('');
 const [resultFilterClass,setResultFilterClass]=useState('All');
 const [resultFilterSubject,setResultFilterSubject]=useState('All');
@@ -995,12 +1004,25 @@ const sendAnn=async(scheduled=false)=>{
                 return['All Classes',...all];
               },[allStudents,resultRows]);
               const filteredPerf=perfClass==='All Classes'?allStudents:allStudents.filter(s=>s.dept===perfClass);
-              const avgM=filteredPerf.length?Math.round(filteredPerf.reduce((a,s)=>a+(s.marks||0),0)/filteredPerf.length):0;
-              const avgA=filteredPerf.length?Math.round(filteredPerf.reduce((a,s)=>a+(s.attend||0),0)/filteredPerf.length):0;
-              const passStudents=filteredPerf.filter(s=>(s.marks||0)>=40).length;
-              const aRisk=filteredPerf.filter(s=>(s.attend||0)<75).length;
-              const topStudents=[...filteredPerf].sort((a,b)=>(b.marks||0)-(a.marks||0)).slice(0,5);
-              const gradeGroups={A:filteredPerf.filter(s=>(s.marks||0)>=80).length,B:filteredPerf.filter(s=>(s.marks||0)>=60&&(s.marks||0)<80).length,C:filteredPerf.filter(s=>(s.marks||0)>=40&&(s.marks||0)<60).length,F:filteredPerf.filter(s=>(s.marks||0)<40).length};
+              const getStudentAvgPct=(studentId)=>{
+                const recs=allStudentResults.filter(r=>r.student?._id===studentId||r.student===studentId);
+                if(recs.length===0) return 0;
+                const sum=recs.reduce((a,r)=>a+(r.total>0?(r.marks/r.total*100):0),0);
+                return Math.round(sum/recs.length);
+              };
+              const getStudentAttendPct=(rollNo)=>{
+                const recs=allAttendance.filter(r=>r.rollNo===rollNo);
+                if(recs.length===0) return 0;
+                const present=recs.filter(r=>r.status==='P').length;
+                return Math.round((present/recs.length)*100);
+              };
+              const perfWithMarks=filteredPerf.map(s=>({...s,calcMarks:getStudentAvgPct(s._id),calcAttend:getStudentAttendPct(s.roll)}));
+              const avgM=perfWithMarks.length?Math.round(perfWithMarks.reduce((a,s)=>a+s.calcMarks,0)/perfWithMarks.length):0;
+              const avgA=perfWithMarks.length?Math.round(perfWithMarks.reduce((a,s)=>a+s.calcAttend,0)/perfWithMarks.length):0;
+              const passStudents=perfWithMarks.filter(s=>s.calcMarks>=40).length;
+              const aRisk=perfWithMarks.filter(s=>s.calcAttend<75).length;
+              const topStudents=[...perfWithMarks].sort((a,b)=>b.calcMarks-a.calcMarks).slice(0,5);
+              const gradeGroups={A:perfWithMarks.filter(s=>s.calcMarks>=80).length,B:perfWithMarks.filter(s=>s.calcMarks>=60&&s.calcMarks<80).length,C:perfWithMarks.filter(s=>s.calcMarks>=40&&s.calcMarks<60).length,F:perfWithMarks.filter(s=>s.calcMarks<40).length};
               return(<>
                 <div style={{display:'flex',gap:12,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
                   <select className="d-select" style={{marginBottom:0,minWidth:200}} value={perfClass} onChange={e=>setPerfClass(e.target.value)}>

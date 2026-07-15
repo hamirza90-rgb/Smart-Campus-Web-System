@@ -40,3 +40,11 @@ exports.getClassAttendance = async (req, res) => {
     res.status(500).json({ message: 'Server error', error });
   }
 };
+exports.getAllAttendance = async (req, res) => {
+  try {
+    const attendance = await Attendance.find().sort({ date: -1 });
+    res.status(200).json(attendance);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
