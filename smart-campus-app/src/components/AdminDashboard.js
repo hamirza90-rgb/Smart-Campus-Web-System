@@ -74,7 +74,7 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
 
   const [searchTerm,setSearchTerm]=useState('');
   const [showAddUser,setShowAddUser]=useState(false);
-  const [newUser,setNewUser]=useState({name:'',email:'',role:'Student',dept:'',password:'',phone:'',roll:''});
+const [newUser,setNewUser]=useState({name:'',email:'',role:'Student',dept:'',password:'',phone:'',roll:'',fatherName:''});
   const [editingUser,setEditingUser]=useState(null);
   const [userTab,setUserTab]=useState('students');
 
@@ -130,6 +130,14 @@ useEffect(()=>{
   apiCall('/attendance/all')
     .then(data=>{
       if(Array.isArray(data)) setAllAttendance(data);
+    })
+    .catch(()=>{});
+},[]);
+const [allCourses,setAllCourses]=useState([]);
+useEffect(()=>{
+  apiCall('/courses')
+    .then(data=>{
+      if(Array.isArray(data)) setAllCourses(data);
     })
     .catch(()=>{});
 },[]);
@@ -221,6 +229,7 @@ useEffect(()=>{
           dept:newUser.dept||'FSc Pre-Eng',
           section:newUser.section||'',
           phone:newUser.phone||'',
+          fatherName:newUser.fatherName||'',
           password:initPw
         });
         if(data.student) setAllStudents(prev=>[...prev,data.student]);
@@ -398,7 +407,13 @@ const setTtEntries=(updater)=>{
   return {...r, topStudent: top?top[0]:r.topStudent};
 });
 const avgScore=allStudentResults.length?Math.round(allStudentResults.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/allStudentResults.length):0;
-const avgPass=allStudentResults.length?Math.round(allStudentResults.filter(r=>r.total>0&&r.marks/r.total>=0.4).length/allStudentResults.length*100):0;
+const passStudentIds=[...new Set(allStudents.map(s=>s._id))].filter(id=>{
+  const recs=allStudentResults.filter(r=>r.student?._id===id||r.student===id);
+  if(recs.length===0) return false;
+  const avg=recs.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/recs.length;
+  return avg>=40;
+});
+const avgPass=allStudents.length?Math.round(passStudentIds.length/allStudents.length*100):0;
 const totalDistinctions=allStudentResults.filter(r=>r.total>0&&r.marks/r.total>=0.8).length;
 
   const saveEditResult=async()=>{
@@ -502,7 +517,7 @@ const sendAnn=async(scheduled=false)=>{
           {/* ── HOME ── */}
           <div className={`panel ${activePane==='a-home'?'active':''}`}>
             <div className="sg">
-              {[['Students',allStudents.length+'','Enrolled','sc-blue'],['Faculty',allTeachers.length+'','Members','sc-green'],['Classes',resultRows.length+'','Active','sc-red'],['Pass Rate',avgPass+'%','This year','sc-amber']].map(([l,v,s,c])=>(<div className={`sc ${c}`} key={l}><div className="sc-l">{l}</div><div className="sc-v">{v}</div><div className="sc-s">{s}</div></div>))}
+{[['Students',allStudents.length+'','Enrolled','sc-blue'],['Faculty',allTeachers.length+'','Members','sc-green'],['Classes',allCourses.length+'','Active','sc-red'],['Pass Rate',avgPass+'%','This year','sc-amber']].map(([l,v,s,c])=>(<div className={`sc ${c}`} key={l}><div className="sc-l">{l}</div><div className="sc-v">{v}</div><div className="sc-s">{s}</div></div>))}
             </div>
             <div className="twoC">
               <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>System Overview</div>
@@ -573,6 +588,9 @@ const sendAnn=async(scheduled=false)=>{
               </div>
               {newUser.role==='Student'&&(
                 <div className="f-group"><div className="f-lab">Roll Number</div><input className="f-inp" style={{width:'100%'}} placeholder="e.g. FSc-A-041" value={newUser.roll||''} onChange={e=>setNewUser({...newUser,roll:e.target.value})}/></div>
+              )}
+              {newUser.role==='Student'&&(
+                <div className="f-group"><div className="f-lab">Father's Name</div><input className="f-inp" style={{width:'100%'}} placeholder="Father's full name" value={newUser.fatherName||''} onChange={e=>setNewUser({...newUser,fatherName:e.target.value})}/></div>
               )}
               {newUser.role==='Student'&&(
   <div className="f-group"><div className="f-lab">Password (optional)</div><input className="f-inp" style={{width:'100%'}} placeholder="Default: FirstName@PGC2026" value={newUser.password||''} onChange={e=>setNewUser({...newUser,password:e.target.value})}/></div>

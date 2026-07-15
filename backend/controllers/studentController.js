@@ -18,7 +18,7 @@ exports.getAllStudents = async (req, res) => {
 // Add new student
 exports.addStudent = async (req, res) => {
   try {
-    const { name, email, roll, dept, section, phone, attend, marks, grade, password } = req.body;
+    const { name, email, roll, dept, section, phone, attend, marks, grade, password, fatherName } = req.body;
     const existing = await Student.findOne({ roll, dept });
     if (existing) return res.status(400).json({ message: 'Student with this roll already exists' });
     const student = await Student.create({
@@ -31,7 +31,8 @@ exports.addStudent = async (req, res) => {
       password: password || `${name.split(' ')[0]}@PGC2026`,
       attend: attend || 100,
       marks: marks || 0,
-      grade: grade || 'N/A'
+      grade: grade || 'N/A',
+      fatherName: fatherName || ''
     });
     res.status(201).json({ message: 'Student added successfully', student });
   } catch (error) {
