@@ -42,6 +42,36 @@ useEffect(()=>{
     .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [user.name]);
+// ── OWN TIMETABLE — sirf mere naam se match hone wale slots ──
+const [myOwnTimetable, setMyOwnTimetable] = useState({});
+useEffect(()=>{
+  const token = localStorage.getItem('token');
+  fetch('http://localhost:5000/api/timetable', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if(Array.isArray(data)){
+        const myName = (user.name||'').toLowerCase().trim();
+        const myEntries = data.filter(entry => (entry.teacher||'').toLowerCase().trim() === myName);
+
+        const grouped={};
+        myEntries.forEach(entry=>{
+          if(!grouped[entry.class]) grouped[entry.class]=[];
+          let row=grouped[entry.class].find(r=>r.time===entry.time);
+          const dayMap={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat'};
+          const shortDay=dayMap[entry.day]||entry.day;
+          if(!row){
+            row={time:entry.time,Mon:'',Tue:'',Wed:'',Thu:'',Fri:''};
+            grouped[entry.class].push(row);
+          }
+          row[shortDay]=entry.subject+(entry.room?' ['+entry.room+']':'');
+        });
+        setMyOwnTimetable(grouped);
+      }
+    })
+    .catch(()=>{});
+},[user.name]);
 const [homeAttendance, setHomeAttendance] = useState([]);
 useEffect(()=>{
   const token = localStorage.getItem('token');
@@ -191,6 +221,31 @@ useEffect(()=>{
     showToast('Attendance saved & downloaded!');
   };
   const filteredStudents=students.filter(s=>s.name.toLowerCase().includes(searchTerm.toLowerCase())||s.roll.toLowerCase().includes(searchTerm.toLowerCase()));
+  const [stuResultsMap, setStuResultsMap] = useState({});
+useEffect(() => {
+  if(filteredStudents.length===0){ setStuResultsMap({}); return; }
+  const token = localStorage.getItem('token');
+  Promise.all(filteredStudents.map(s =>
+    fetch(`http://localhost:5000/api/studentresults/${s._id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(r=>r.json()).catch(()=>[])
+  )).then(results=>{
+    const map={};
+    filteredStudents.forEach((s,i)=>{
+      const arr=Array.isArray(results[i])?results[i]:[];
+      if(arr.length===0){ map[s._id]={pct:null,grade:'N/A'}; return; }
+      const avg=Math.round(arr.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/arr.length);
+      const lastRes=arr[arr.length-1];
+const lastGrade=lastRes?.grade || (lastRes && lastRes.total>0 ? (()=>{const p=lastRes.marks/lastRes.total*100; return p>=90?'A+':p>=80?'A':p>=70?'B+':p>=60?'B':p>=50?'C':p>=40?'D':'F';})() : 'N/A');
+      map[s._id]={pct:avg,grade:lastGrade};
+    });
+    setStuResultsMap(map);
+  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [filteredStudents.length, attClass]);
+
+const getStudentMarksPct = (id) => stuResultsMap[id]?.pct ?? null;
+const getStudentGrade = (id) => stuResultsMap[id]?.grade ?? 'N/A';
 const deleteStudent=async(id)=>{
   setStudents(prev=>prev.filter(s=>s._id!==id));
   try{
@@ -261,7 +316,26 @@ const deleteStudent=async(id)=>{
   {id:'t-home',label:'Dashboard'},{id:'t-attend',label:'Attendance'},{id:'t-courses',label:'Course Module'},{id:'t-students',label:'Student Module'},{id:'t-assign',label:'Assignments'},{id:'t-result',label:'Results'},{id:'t-tt',label:'Timetable'},{id:'t-notif',label:'Notifications'},{id:'t-perf',label:'Analytics'},
 ];
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
-  const adminAnnsForTeacher=(adminAnns||[]).filter(a=>a.audience==='All Students & Teachers'||a.audience==='Teachers Only');
+  const [realAdminAnns,setRealAdminAnns]=useState([]);
+useEffect(()=>{
+  fetch('http://localhost:5000/api/announcements')
+    .then(res=>res.json())
+    .then(data=>{
+      if(Array.isArray(data)){
+        const adminOnly = data.filter(a => a.createdBy!=='teacher');
+        setRealAdminAnns(adminOnly);
+      }
+    }).catch(()=>{});
+},[]);
+
+const adminAnnsForTeacher=realAdminAnns.filter(a=>a.audience==='All Students & Teachers'||a.audience==='Teachers Only').map(a=>({
+  id:a._id,
+  title:a.title,
+  msg:a.msg,
+  time:a.scheduled?('Scheduled: '+(a.schedDate?new Date(a.schedDate).toLocaleDateString('en-GB'):'')):new Date(a.createdAt).toLocaleString('en-GB'),
+  audience:a.audience,
+  color:'#C0392B'
+}));
   const teacherUnreadCount=adminAnnsForTeacher.filter(a=>a.id).length;
 
   return(
@@ -357,6 +431,39 @@ const deleteStudent=async(id)=>{
               const [scanAnim]=useState(false);
               const [lastScanned,setLastScanned]=useState(null);
               const [savedSessions,setSavedSessions]=useState(attSaved);
+              useEffect(()=>{
+  if(!attClass) return;
+  const token = localStorage.getItem('token');
+  fetch(`http://localhost:5000/api/attendance/class/${encodeURIComponent(attClass)}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if(Array.isArray(data)){
+        // Group by date+subject+class taake ek session ek row bane
+        const grouped = {};
+        data.forEach(r=>{
+          const key = `${r.date}_${r.subject}_${r.class}`;
+          if(!grouped[key]){
+            grouped[key] = {
+              date: new Date(r.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}),
+              class: r.class,
+              subject: r.subject,
+              p: 0, a: 0, l: 0,
+              mode: r.mode || 'Manual'
+            };
+          }
+          if(r.status==='P') grouped[key].p++;
+          else if(r.status==='A') grouped[key].a++;
+          else if(r.status==='L') grouped[key].l++;
+          if(r.mode==='QR Scan') grouped[key].mode='QR Scan';
+        });
+        const sessions = Object.values(grouped).sort((a,b)=>new Date(b.date)-new Date(a.date));
+        setSavedSessions(sessions);
+      }
+    })
+    .catch(()=>{});
+},[attClass]);
               const [stuSearch,setStuSearch]=useState('');
 
               // simulateScan: real scanner kholega + _markPresent callback register karega
@@ -1220,7 +1327,7 @@ const openPdfView=(s)=>{ setPdfViewLocation({student:s.student,file:s.file,fileP
     }).then(r=>r.json()).catch(()=>[])
   )).then(results=>{
     const rows=filtered.map((s,i)=>{
-      const res=Array.isArray(results[i])?results[i].find(r=>r.examName===examType):null;
+      const res=Array.isArray(results[i])?results[i].find(r=>r.examName===examType&&r.subject===examSubject):null;
       return {
         _id:s._id,
         name:s.name,
@@ -1326,7 +1433,6 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
               return(<>
                 <div className="card">
                   <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Result Entry — {examSubject||'Results'}
-                    <button className="add-btn" style={{marginLeft:'auto'}} onClick={()=>setShowAddRow(v=>!v)}>+ Add Student</button>
                   </div>
                   <div className="form-row" style={{marginBottom:12,gap:12}}>
                   <div style={{flex:1}}>
@@ -1451,7 +1557,7 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                       <div><div className="user-name">{s.name}</div><div className="user-detail">{s.roll}</div></div>
                       <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
     <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80'}}>{getStudentAttendancePct(s.roll)}%</span></div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa'}}>{s.marks}</span></div></div>
-    <span className={`badge ${getGradeColor(s.grade)}`}>{s.grade}</span>
+    <span className={`badge ${getGradeColor(getStudentGrade(s._id))}`}>{getStudentGrade(s._id)}</span>
     <button className="delete-btn" onClick={e=>{e.stopPropagation();deleteStudent(s._id);}}>Remove</button>
   </div>                     
                     </div>))}
@@ -1475,12 +1581,12 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                           </div>
                         </div>
                         <div className="analy-grid" style={{gridTemplateColumns:'repeat(3,1fr)',marginBottom:12}}>
-                            <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>{getStudentAttendancePct(selectedStudent.roll)}%</div><div className="analy-lab">Attendance</div></div>
-                          <div className="analy-card"><div className="analy-val" style={{color:'#60a5fa'}}>{selectedStudent.marks}</div><div className="analy-lab">Marks</div></div>
-                          <div className="analy-card"><div className="analy-val"><span className={`badge ${getGradeColor(selectedStudent.grade)}`}>{selectedStudent.grade}</span></div><div className="analy-lab">Grade</div></div>
+                          <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>{getStudentAttendancePct(selectedStudent.roll)}%</div><div className="analy-lab">Attendance</div></div>
+<div className="analy-card"><div className="analy-val" style={{color:'#60a5fa'}}>{getStudentMarksPct(selectedStudent._id)!=null?`${getStudentMarksPct(selectedStudent._id)}%`:'N/A'}</div><div className="analy-lab">Marks</div></div>
+<div className="analy-card"><div className="analy-val"><span className={`badge ${getGradeColor(getStudentGrade(selectedStudent._id))}`}>{getStudentGrade(selectedStudent._id)}</span></div><div className="analy-lab">Grade</div></div>
                         </div>
                         <div className="pr"><span className="pl">Attendance</span><div className="pb"><div className="pf" style={{width:`${getStudentAttendancePct(selectedStudent.roll)}%`,background:'#1D9E75'}}/></div><span className="pv">{getStudentAttendancePct(selectedStudent.roll)}%</span></div>
-                        <div className="pr"><span className="pl">Academic Score</span><div className="pb"><div className="pf" style={{width:`${selectedStudent.marks}%`,background:'#2471A3'}}/></div><span className="pv">{selectedStudent.marks}%</span></div>
+                        <div className="pr"><span className="pl">Academic Score</span><div className="pb"><div className="pf" style={{width:`${getStudentMarksPct(selectedStudent._id)||0}%`,background:'#2471A3'}}/></div><span className="pv">{selectedStudent.marks}%</span></div>
                         <div style={{marginTop:10,display:'flex',gap:8}}>
                           <button className="d-btn d-btn-blue" onClick={()=>setActivePane('t-attend')}>✍️ Mark Attendance</button>
                           <button className="d-btn d-btn-green" onClick={()=>setActivePane('t-result')}>📊 View Results</button>
@@ -1496,8 +1602,8 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                             </div>
                             <div style={{display:'flex',gap:10,justifyContent:'space-between'}}>
                                 <div style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80',fontWeight:600}}>{getStudentAttendancePct(s.roll)}%</span></div>
-                              <div style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa',fontWeight:600}}>{s.marks}%</span></div>
-                              <span className={`badge ${getGradeColor(s.grade)}`} style={{fontSize:9}}>{s.grade}</span>
+                                <div style={{fontSize:10,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa',fontWeight:600}}>{getStudentMarksPct(s._id)!=null?`${getStudentMarksPct(s._id)}%`:'N/A'}</span></div>
+<span className={`badge ${getGradeColor(getStudentGrade(s._id))}`} style={{fontSize:9}}>{getStudentGrade(s._id)}</span>
                             </div>
                           </div>
                         ))}
@@ -1514,7 +1620,7 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                         const colors=['#2471A3','#7F77DD','#D4AC0D','#1D9E75','#C0392B'];
                         return(<div className="chart-row" key={s.roll}>
                           <span className="chart-label">{s.name.split(' ')[0]}</span>
-                          <div className="chart-bar-bg"><div className="chart-bar-fill" style={{width:`${s.marks}%`,background:colors[i%colors.length]}}><span style={{color:'rgba(255,255,255,0.9)'}}>{s.marks}%</span></div></div>
+                          <div className="chart-bar-bg"><div className="chart-bar-fill" style={{width:`${getStudentMarksPct(s._id)||0}%`,background:colors[i%colors.length]}}><span style={{color:'rgba(255,255,255,0.9)'}}>{getStudentMarksPct(s._id)!=null?`${getStudentMarksPct(s._id)}%`:'No result'}</span></div></div>
                           <span className="chart-val" style={{color:'#4ade80'}}>{getStudentAttendancePct(s.roll)}%</span>
                         </div>);
                       })}
@@ -1525,28 +1631,19 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
               </>);
             })()}
           </div>
-          {/* TIMETABLE — reads from per-class admin-managed timetable */}
+          {/* TIMETABLE — sirf mere apne slots, backend se seedha fetch */}
           <div className={`panel ${activePane==='t-tt'?'active':''}`}>
             <div className="card">
               <div className="ct"><div className="ct-dot" style={{background:'#7F77DD'}}></div>My Timetable
                 <span style={{marginLeft:'auto',fontSize:10,color:'rgba(255,255,255,0.3)'}}>Managed by Admin · auto-synced</span>
               </div>
               <div style={{fontSize:11,color:'rgba(255,255,255,0.3)',marginBottom:12}}>
-                📅 Your timetable is set by the admin. Slots with your name are highlighted. NEW badge = recently added by admin.
+                📅 These are only the classes assigned to you by the Admin.
               </div>
               {(()=>{
-                const myLastName=(user.name||d.name).toLowerCase().split(' ').pop();
-                const myTtChangelog=(ttChangelog||[]).filter(c=>c.subject&&c.subject.toLowerCase().includes(myLastName));
-                const allClassEntries=Object.entries(classTimetables||{});
-                const myClassEntries=allClassEntries.filter(([cls,rows])=>rows.some(row=>['Mon','Tue','Wed','Thu','Fri'].some(day=>row[day]&&row[day].toLowerCase().includes(myLastName))));
-                const displayEntries=myClassEntries.length>0?myClassEntries:allClassEntries;
-                if(displayEntries.length===0) return <div style={{textAlign:'center',padding:'30px 0',color:'rgba(255,255,255,0.25)',fontSize:12}}>No timetable entries yet. Please wait for admin to set the schedule.</div>;
+                const displayEntries=Object.entries(myOwnTimetable||{});
+                if(displayEntries.length===0) return <div style={{textAlign:'center',padding:'30px 0',color:'rgba(255,255,255,0.25)',fontSize:12}}>Abhi tak koi class assign nahi hui. Admin ka intezar karein.</div>;
                 return(<>
-                  {myTtChangelog.length>0&&(
-                    <div style={{background:'rgba(29,131,72,0.08)',border:'1px solid rgba(29,131,72,0.2)',borderRadius:8,padding:'8px 12px',marginBottom:10,fontSize:11,color:'rgba(255,255,255,0.55)',display:'flex',alignItems:'center',gap:8}}>
-                      <span>🔔</span><span><strong style={{color:'#4ade80'}}>{myTtChangelog.length} new slot{myTtChangelog.length>1?'s':''}</strong> assigned to you — marked <span style={{background:'#1D9E75',borderRadius:3,fontSize:8,padding:'1px 4px',color:'#fff',marginLeft:2}}>NEW</span></span>
-                    </div>
-                  )}
                   {displayEntries.map(([cls,rows])=>(
                     <div key={cls} style={{marginBottom:14}}>
                       <div style={{fontSize:11,color:'#4ade80',fontWeight:600,marginBottom:6}}>📚 {cls}</div>
@@ -1558,13 +1655,9 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                             <div className="tt-t">{row.time}</div>
                             {['Mon','Tue','Wed','Thu','Fri'].map(day=>{
                               const cell=row[day]||'';
-                              const isMySlot=cell.toLowerCase().includes(myLastName);
-                              const isNew=myTtChangelog.some(c=>c.cls===cls&&c.time===row.time&&c.day===day);
                               return(
-                                <div key={day} className={`tt-c ${cell?['tc1','tc2','tc3','tc4','tc5'][i%5]:'tt-e'}`}
-                                  style={isMySlot?{outline:'2px solid #1D9E75',outlineOffset:'-2px',position:'relative'}:{position:'relative'}}>
+                                <div key={day} className={`tt-c ${cell?['tc1','tc2','tc3','tc4','tc5'][i%5]:'tt-e'}`}>
                                   {cell}
-                                  {isNew&&cell&&<span style={{position:'absolute',top:2,right:2,background:'#1D9E75',borderRadius:3,fontSize:7,padding:'1px 3px',color:'#fff',lineHeight:1}}>NEW</span>}
                                 </div>
                               );
                             })}
@@ -1573,10 +1666,6 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                       </div>
                     </div>
                   ))}
-                  <div style={{fontSize:10,color:'rgba(255,255,255,0.22)',display:'flex',alignItems:'center',gap:6,marginTop:4}}>
-                    <span style={{display:'inline-block',width:10,height:10,outline:'2px solid #1D9E75',borderRadius:2}}></span>
-                    Highlighted slots are assigned to you
-                  </div>
                 </>);
               })()}
             </div>
@@ -2077,7 +2166,9 @@ const deleteChap=async(chapId)=>{
     .then(res=>res.json())
     .then(data=>{
       if(Array.isArray(data)){
-        setSentList(data.map(a=>({
+        const myId = user?._id || user?.id || '';
+        const myOwn = data.filter(a => a.createdBy==='teacher' && String(a.createdById)===String(myId));
+        setSentList(myOwn.map(a=>({
           id:a._id,
           text:a.title+': '+a.msg,
           time:a.scheduled?('Scheduled: '+(a.schedDate?new Date(a.schedDate).toLocaleDateString('en-GB'):'')):new Date(a.createdAt).toLocaleString('en-GB'),
@@ -2123,20 +2214,22 @@ const deleteChap=async(chapId)=>{
     let realId = Date.now();
     try {
       const res = await fetch('http://localhost:5000/api/announcements', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title: notifTitle,
-          msg: notifMsg,
-          audience: notifTo === 'All Students' ? 'All Students & Teachers' : notifTo,
-          type: notifType,
-          scheduled: !!schedDate,
-          schedDate: schedDate
-        })
-      });
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  },
+  body: JSON.stringify({
+    title: notifTitle,
+    msg: notifMsg,
+    audience: notifTo === 'All Students' ? 'All Students & Teachers' : notifTo,
+    type: notifType,
+    scheduled: !!schedDate,
+    schedDate: schedDate,
+    createdBy: 'teacher',
+    createdById: user?._id || user?.id || ''
+  })
+});
       const data = await res.json();
       if(data.ann && data.ann._id) realId = data.ann._id;
       showToast('🔔 Notification sent & saved!');
@@ -2171,7 +2264,7 @@ const deleteChap=async(chapId)=>{
                 setEditingNotif(n);
                 setTNotifTab('create');
               };
-              const adminAnnsT=(adminAnns||[]).filter(a=>a.audience==='All Students & Teachers'||a.audience==='Teachers Only');
+              const adminAnnsT=adminAnnsForTeacher;
 
               return(<>
                 <div className="tab-row">{[['create',editingNotif?'✏️ Edit':'➕ Create'],['sent','📤 Sent'],['admin','📢 Admin Msgs']].map(([t,l])=><button key={t} className={`tab-btn ${tNotifTab===t?'active':''}`} onClick={()=>{setTNotifTab(t);if(t!=='create')setEditingNotif(null);}}>{l}</button>)}</div>
@@ -2194,21 +2287,23 @@ const deleteChap=async(chapId)=>{
                     </div>
                     <div className="f-group" style={{marginTop:8}}><div className="f-lab">Title *</div><input className="f-inp" style={{width:'100%',marginTop:4}} placeholder={notifType==='Class Cancel'?'e.g. Class Cancel — 10 April':notifType==='Exam Schedule'?'e.g. Physics Test — 15 April':'e.g. Important Announcement'} value={notifTitle} onChange={e=>setNotifTitle(e.target.value)}/></div>
                     <div className="f-group" style={{marginTop:8}}><div className="f-lab">Message *</div><textarea className="f-inp" style={{width:'100%',marginTop:4,resize:'vertical',minHeight:80}} placeholder="Write your message here..." value={notifMsg} onChange={e=>setNotifMsg(e.target.value)}/></div>
-                    <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
-                      <button className="d-btn d-btn-primary" onClick={()=>{setSchedDate('');setSchedTime('');sendOrUpdate();}}>{editingNotif?'💾 Update':'🔔 Send Now'}</button>
-                      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                        <input type="date" className="f-inp" style={{width:'auto',fontSize:11}} value={schedDate} onChange={e=>setSchedDate(e.target.value)} title="Schedule Date"/>
-                        <input type="time" className="f-inp" style={{width:'auto',fontSize:11}} value={schedTime} onChange={e=>setSchedTime(e.target.value)} title="Schedule Time"/>
-                        <button className="d-btn d-btn-blue" onClick={()=>{if(!schedDate){showToast('Select a schedule date first','⚠');return;}sendOrUpdate();}}>📅 Schedule</button>
-                      </div>
-                      {editingNotif&&<button className="d-btn" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.4)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'6px 14px',fontSize:11,cursor:'pointer'}} onClick={()=>{setEditingNotif(null);setNotifTitle('');setNotifMsg('');setTNotifTab('sent');}}>Cancel</button>}
-                    </div>
+<div className="f-group" style={{marginTop:8}}>
+  <div className="f-lab">Date *</div>
+  <input type="date" className="f-inp" style={{width:'100%',marginTop:4}} value={schedDate} onChange={e=>setSchedDate(e.target.value)}/>
+</div>
+<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
+  <button className="d-btn d-btn-primary" onClick={()=>{
+    if(!schedDate){ showToast('Please select a date first','⚠'); return; }
+    sendOrUpdate();
+  }}>{editingNotif?'💾 Update':'🔔 Send Notification'}</button>
+  {editingNotif&&<button className="d-btn" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.4)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'6px 14px',fontSize:11,cursor:'pointer'}} onClick={()=>{setEditingNotif(null);setNotifTitle('');setNotifMsg('');setTNotifTab('sent');}}>Cancel</button>}
+</div>
                   </div>
                 )}
 
                 {tNotifTab==='sent'&&(
                   <div className="card">
-                    <div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>Sent Notifications ({sentList.length}) — Students ko visible hain</div>
+                    <div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>Sent Notifications ({sentList.length}) — Visible to students</div>
                     {sentList.length===0&&<div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'20px 0'}}>No notifications sent yet.</div>}
                     {sentList.map(n=>(
                       <div className="notif-item" key={n.id}>
@@ -2377,7 +2472,7 @@ const deleteChap=async(chapId)=>{
                         <div className="chart-row" key={s.name}>
                           <span className="chart-label">{s.name.split(' ')[0]}</span>
                           <div className="chart-bar-bg"><div className="chart-bar-fill" style={{width:`${marksPct??0}%`,background:colors[i%colors.length]}}><span style={{color:'rgba(255,255,255,0.9)'}}>{marksPct??'No result'}{marksPct!==null?'%':''}</span></div></div>
-                          <span className="chart-val">{attPct??'—'}%</span>
+                          <span className="chart-val">{attPct!=null?`${attPct}%`:'No attendance data'}</span>
                         </div>
                       );
                     })}

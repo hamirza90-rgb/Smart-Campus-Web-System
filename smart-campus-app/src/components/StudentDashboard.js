@@ -390,7 +390,7 @@ const attTotal=realAttendance.length;
 const attOverall=attTotal>0?Math.round((attPresent/attTotal)*100):0;
 const attLog=[...realAttendance].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>({
   date:new Date(r.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}),
-  subject:r.class,
+  subject:r.subject||r.class,
   status:r.status==='P'?'Present':r.status==='A'?'Absent':'Leave',
   method:r.mode||'Manual'
 }));

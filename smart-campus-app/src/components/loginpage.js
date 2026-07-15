@@ -42,13 +42,15 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
   }[role];
 
   // ── SETUP: pehli baar email+password set karo ──
-  const doSetup=()=>{
+    const doSetup=()=>{
     if(!setupEmail||!setupEmail.includes('@')||!setupEmail.includes('.')){ setSetupErr('Please enter a valid email address'); return; }
     if(!setupPw||setupPw.length<8){ setSetupErr('Password must be at least 8 characters'); return; }
     if(setupPw!==setupPw2){ setSetupErr('Passwords do not match'); return; }
     setSetupErr('');
     updateCred(role,{ email:setupEmail.toLowerCase(), password:setupPw, isSet:true });
-    // Auto login after setup
+    // 👇 Purana stale token hatayein
+    localStorage.removeItem('token');
+    localStorage.setItem('adminAuth', 'true');
     onLogin(role,{ name:cred.name });
   };
 
@@ -96,6 +98,24 @@ function LoginPage({role,onBack,onLogin,portalCreds,updateCred}){
           setPassErr('');
           if(data.token) localStorage.setItem('token', data.token);
           onLogin('teacher',{id:data.id,name:data.name,email:data.email,dept:data.dept});
+        } else {
+          setPassErr(data.message||'Login failed. Check email and password.');
+        }
+      }catch(err){
+        setPassErr('Server error. Make sure backend is running.');
+      }
+    } else if(role==='admin'){
+      try{
+        const res=await fetch('http://localhost:5000/api/auth/login',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({email:email.toLowerCase(),password})
+        });
+        const data=await res.json();
+        if(res.ok){
+          setPassErr('');
+          if(data.token) localStorage.setItem('token', data.token);
+          onLogin('admin',{ name:data.user?.name||cred.name, email:data.user?.email });
         } else {
           setPassErr(data.message||'Login failed. Check email and password.');
         }

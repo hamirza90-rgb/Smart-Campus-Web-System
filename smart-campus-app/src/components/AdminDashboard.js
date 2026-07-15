@@ -155,9 +155,23 @@ useEffect(()=>{
   // ── Announcements ──
   const anns=adminAnns;
   const setAnns=setAdminAnns;
+  const formatTimeAgo=(dateStr)=>{
+  if(!dateStr) return 'Just now';
+  const now=new Date();
+  const then=new Date(dateStr);
+  const diffMins=Math.floor((now-then)/60000);
+  if(diffMins<1) return 'Just now';
+  if(diffMins<60) return `${diffMins}m ago`;
+  const diffHrs=Math.floor(diffMins/60);
+  if(diffHrs<24) return `${diffHrs}h ago`;
+  const diffDays=Math.floor(diffHrs/24);
+  if(diffDays<30) return `${diffDays}d ago`;
+  const diffMonths=Math.floor(diffDays/30);
+  return `${diffMonths}mo ago`;
+};
   useEffect(()=>{
   apiCall('/announcements').then(data=>{
-    if(Array.isArray(data)) setAnns(data.map(a=>({...a,id:a._id,time:a.scheduled&&a.schedDate?`Scheduled: ${a.schedDate}`:'Just now',color:'#C0392B'})));
+    if(Array.isArray(data)) setAnns(data.map(a=>({...a,id:a._id,time:a.scheduled&&a.schedDate?`Scheduled: ${a.schedDate}`:formatTimeAgo(a.createdAt),color:'#C0392B'})));
   }).catch(()=>{});
 },[setAnns]);
   const [aTitle,setATitle]=useState('');
@@ -1113,22 +1127,23 @@ const sendAnn=async(scheduled=false)=>{
                   )}
                   <div className="f-group" style={{marginTop:10}}><div className="f-lab">Title *</div><input className="f-inp" style={{width:'100%',marginTop:4}} placeholder="e.g. Holiday Notice" value={aTitle} onChange={e=>setATitle(e.target.value)}/></div>
                   <div className="f-group" style={{marginTop:8}}><div className="f-lab">Message *</div><textarea className="f-inp" style={{width:'100%',marginTop:4,resize:'vertical',minHeight:80}} placeholder="Write your announcement..." value={aMsg} onChange={e=>setAMsg(e.target.value)}/></div>
-                  <div style={{display:'flex',gap:8,marginTop:8}}>
-                    {editingAnn?(
-                      <>
-                        <button className="d-btn d-btn-green" onClick={updateAnn}>💾 Update</button>
-                        <button className="d-btn d-btn-blue" onClick={()=>{setEditingAnn(null);setATitle('');setAMsg('');}}>Cancel</button>
-                      </>
-                    ):(
-                      <>
-                        <button className="d-btn d-btn-primary" onClick={()=>sendAnn(false)}>🔔 Send Now</button>
-                        <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                          <input type="date" className="f-inp" style={{width:'auto',fontSize:11}} value={schedDate} onChange={e=>setSchedDate(e.target.value)}/>
-                          <button className="d-btn d-btn-blue" onClick={()=>{if(!schedDate){showToast('Select date first');return;}sendAnn(true);}}>📅 Schedule</button>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <div className="f-group" style={{marginTop:8}}>
+  <div className="f-lab">Date *</div>
+  <input type="date" className="f-inp" style={{width:'100%',marginTop:4}} value={schedDate} onChange={e=>setSchedDate(e.target.value)}/>
+</div>
+<div style={{display:'flex',gap:8,marginTop:8}}>
+  {editingAnn?(
+    <>
+      <button className="d-btn d-btn-green" onClick={updateAnn}>💾 Update</button>
+      <button className="d-btn d-btn-blue" onClick={()=>{setEditingAnn(null);setATitle('');setAMsg('');}}>Cancel</button>
+    </>
+  ):(
+    <button className="d-btn d-btn-primary" onClick={()=>{
+      if(!schedDate){ showToast('Please select a date first','⚠'); return; }
+      sendAnn(true);
+    }}>🔔 Send Announcement</button>
+  )}
+</div>
                 </div>
                 <div className="card">
                   <div className="ct"><div className="ct-dot" style={{background:'#2471A3'}}></div>Announcements ({anns.length})</div>

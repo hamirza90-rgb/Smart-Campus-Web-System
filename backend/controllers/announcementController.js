@@ -13,8 +13,8 @@ exports.getAllAnnouncements = async (req, res) => {
 // Add announcement
 exports.addAnnouncement = async (req, res) => {
   try {
-    const { title, msg, audience, scheduled, schedDate } = req.body;
-    const ann = await Announcement.create({ title, msg, audience, scheduled, schedDate });
+    const { title, msg, audience, scheduled, schedDate, createdBy, createdById } = req.body;
+    const ann = await Announcement.create({ title, msg, audience, scheduled, schedDate, createdBy: createdBy||'admin', createdById: createdById||'' });
     res.status(201).json({ message: 'Announcement added', ann });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });

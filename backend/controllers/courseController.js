@@ -36,20 +36,28 @@ exports.getAllCourses = async (req, res) => {
 // TEACHER: add course — teacherId ALWAYS comes from JWT, never from client body
 exports.addCourse = async (req, res) => {
   try {
-    const { name, class: className, chapters, status } = req.body;
+    const { name, class: className, chapters, status, teacherId } = req.body;
     if (!name || !className) {
       return res.status(400).json({ message: 'Course name and class are required' });
     }
 
-    const teacherDoc = await Teacher.findById(req.user.id);
+    // Agar Teacher khud add kar raha hai -> apna hi ID use hoga
+    // Agar Admin add kar raha hai -> body se aaya hua teacherId use hoga (dropdown se select kiya hua)
+    const finalTeacherId = req.user.role === 'teacher' ? req.user.id : (teacherId || null);
+
+    let teacherName = '';
+    if (finalTeacherId) {
+      const teacherDoc = await Teacher.findById(finalTeacherId);
+      teacherName = teacherDoc ? teacherDoc.name : '';
+    }
 
     const course = await Course.create({
       name,
       class: className,
       chapters: chapters || 0,
       status: status || 'Active',
-      teacherId: req.user.id,           // secure — from token
-      teacher: teacherDoc ? teacherDoc.name : ''
+      teacherId: finalTeacherId,
+      teacher: teacherName
     });
 
     res.status(201).json(course);
@@ -64,10 +72,21 @@ exports.updateCourse = async (req, res) => {
     const course = await Course.findById(req.params.id);
     if (!course) return res.status(404).json({ message: 'Course not found' });
 
-    const { name, class: className, chapters, status, chapDone } = req.body;
+    const { name, class: className, chapters, status, chapDone, teacherId } = req.body;
+
+    const updateData = { name, class: className, chapters, status, chapDone };
+
+    // Agar teacher change kiya gaya hai, to teacherId aur teacher naam dono update karein
+    if (teacherId) {
+      const Teacher = require('../models/Teacher');
+      const teacherDoc = await Teacher.findById(teacherId);
+      updateData.teacherId = teacherId;
+      updateData.teacher = teacherDoc ? teacherDoc.name : '';
+    }
+
     const updated = await Course.findByIdAndUpdate(
       req.params.id,
-      { $set: { name, class: className, chapters, status, chapDone } },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 

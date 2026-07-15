@@ -6,6 +6,8 @@ const announcementSchema = new mongoose.Schema({
   audience: { type: String, required: true },
   scheduled: { type: Boolean, default: false },
   schedDate: { type: String },
+  createdBy: { type: String, default: 'admin' },
+  createdById: { type: String, default: '' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Announcement', announcementSchema);

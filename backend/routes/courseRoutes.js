@@ -9,14 +9,10 @@ const {
   deleteCourse
 } = require('../controllers/courseController');
 
-// Teacher: only their own courses (Teacher Dashboard uses this)
 router.get('/my', protect(['teacher']), getMyCourses);
-
-// General/student/admin: all courses, optionally ?class=XYZ
 router.get('/', getAllCourses);
 
-// Teacher: create/update/delete — only their own
-router.post('/', protect(['teacher']), addCourse);
-router.put('/:id', updateCourse);
-router.delete('/:id', deleteCourse);
+router.post('/', protect(['teacher','admin']), addCourse);
+router.put('/:id', protect(['teacher','admin']), updateCourse);
+router.delete('/:id', protect(['teacher','admin']), deleteCourse);
 module.exports = router;
