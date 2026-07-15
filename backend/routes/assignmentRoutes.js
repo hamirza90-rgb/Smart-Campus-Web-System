@@ -22,6 +22,7 @@ const {
   getAllAssignments,
   updateAssignment,
   updateAssignmentStatus,
+  adminUpdateAssignmentStatus,
   submitAssignment,
   gradeAssignment,
   deleteAssignment
@@ -44,7 +45,8 @@ router.get('/', getAllAssignments);
 router.put('/:id', protect(['teacher']), updateAssignment);
 
 // TEACHER: update status — only if they own it
-router.put('/:id/status', protect(['teacher']), updateAssignmentStatus);
+router.put('/admin/:id/status', protect(['admin']), adminUpdateAssignmentStatus);
+
 
 // STUDENT: submit assignment (file upload OR pasted text)
 router.post('/:id/submit', upload.single('file'), submitAssignment);

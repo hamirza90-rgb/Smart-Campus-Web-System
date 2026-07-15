@@ -900,7 +900,6 @@ const overallGrade = d.results.length>0 ? (avgMarks>=90?'A+':avgMarks>=80?'A':av
               </table>
               <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>
                 <button className="d-btn d-btn-blue" onClick={()=>handleDownload('Result_Card_March2026.pdf')}>⬇ Download Result Card</button>
-                <button className="d-btn d-btn-primary" onClick={()=>handleDownload('Transcript_Laiba_Imtiaz.pdf')}>⬇ Download Transcript</button>
               </div>
             </div>
             <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#7F77DD'}}></div>Overall Summary</div>
@@ -1161,7 +1160,7 @@ const overallGrade = d.results.length>0 ? (avgMarks>=90?'A+':avgMarks>=80?'A':av
                         <button style={{background:'rgba(192,57,43,0.1)',border:'1px solid rgba(192,57,43,0.2)',color:'#f87171',borderRadius:4,padding:'2px 6px',fontSize:8,cursor:'pointer'}} onClick={()=>toggleSaved(n.id)}>Remove</button>
                       </div>
                     ))}
-                    {allNotifs.filter(n=>savedNotifs.has(n.id)).length===0&&<div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'20px 0'}}>Koi saved notification nahi. ☆ Save button se important notifications save karein.</div>}
+                    {allNotifs.filter(n=>savedNotifs.has(n.id)).length===0&&<div style={{color:'rgba(255,255,255,0.25)',fontSize:12,textAlign:'center',padding:'20px 0'}}>No saved notifications. Use the ☆ Save button to save important notifications.</div>}
                   </div>
                 )}
 

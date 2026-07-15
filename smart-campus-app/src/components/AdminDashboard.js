@@ -238,16 +238,19 @@ useEffect(()=>{
     try{
       if(newUser.role==='Student'){
         const initPw=newUser.password||`${newUser.name.split(' ')[0]}@PGC2026`;
-        const data=await apiCall('/students','POST',{
-          name:newUser.name,
-          email:newUser.email,
-          roll:newUser.roll||`FSc-A-0${Math.floor(Math.random()*90+10)}`,
-          dept:newUser.dept||'FSc Pre-Eng',
-          section:newUser.section||'',
-          phone:newUser.phone||'',
-          fatherName:newUser.fatherName||'',
-          password:initPw
-        });
+        const formattedRoll = newUser.roll
+  ? (/^\d+$/.test(newUser.roll.trim()) ? newUser.roll.trim().padStart(3,'0') : newUser.roll.trim())
+  : `FSc-A-0${Math.floor(Math.random()*90+10)}`;
+const data=await apiCall('/students','POST',{
+  name:newUser.name,
+  email:newUser.email,
+  roll:formattedRoll,
+  dept:newUser.dept||'FSc Pre-Eng',
+  section:newUser.section||'',
+  phone:newUser.phone||'',
+  fatherName:newUser.fatherName||'',
+  password:initPw
+});
         if(data.student) setAllStudents(prev=>[...prev,data.student]);
         showToast(`Student "${newUser.name}" added! Password: ${initPw}`);
       } else if(newUser.role==='Teacher'){
@@ -288,12 +291,15 @@ useEffect(()=>{
 
   // ── Update - Real Backend ──
   const saveEditStudent=async()=>{
-    try{
-      const data=await apiCall(`/students/${editingUser.id}`,'PUT',editingUser.data);
-      if(data.student) setAllStudents(prev=>prev.map(s=>s._id===editingUser.id?data.student:s));
-      setEditingUser(null); showToast('Student updated in database!');
-    }catch(err){ showToast('Error updating student.'); }
-  };
+  try{
+    const roll=editingUser.data.roll;
+    const formattedRoll = roll && /^\d+$/.test(roll.trim()) ? roll.trim().padStart(3,'0') : roll;
+    const payload={...editingUser.data, roll:formattedRoll};
+    const data=await apiCall(`/students/${editingUser.id}`,'PUT',payload);
+    if(data.student) setAllStudents(prev=>prev.map(s=>s._id===editingUser.id?data.student:s));
+    setEditingUser(null); showToast('Student updated in database!');
+  }catch(err){ showToast('Error updating student.'); }
+};
 
   const saveEditTeacher=async()=>{
     try{
@@ -338,6 +344,33 @@ const setTtEntries=(updater)=>{
   if(!ttSubject.trim()){ showToast('Enter subject name'); return; }
   if(!ttClass.trim()){ showToast('Enter class name'); return; }
   const slot=ttSlot.trim()||'08:00-09:30';
+  const shortDayCheck=dayMap[ttDay]||ttDay;
+
+  // ── CHECK 1: Same class, same day+time slot already occupied? ──
+  const currentClassRows=classTimetables?.[finalClass]||[];
+  const existingRow=currentClassRows.find(r=>r.time===slot);
+  const existingCell=existingRow ? existingRow[shortDayCheck] : '';
+  if(existingCell && existingCell.trim()!==''){
+    const confirmOverwrite=window.confirm(
+      `⚠️ ${finalClass} — ${ttDay} ${slot} is already assigned:\n"${existingCell}"\n\nOverwrite this slot?`
+    );
+    if(!confirmOverwrite) return;
+  }
+
+  // ── CHECK 2: Same teacher already busy elsewhere at same day+time? ──
+  if(ttTeacher.trim()){
+    const conflictClass=Object.entries(classTimetables||{}).find(([cls,rows])=>{
+      if(cls===finalClass) return false; // apni hi class mein overwrite already handled upar
+      const row=rows.find(r=>r.time===slot);
+      const cell=row ? row[shortDayCheck] : '';
+      return cell && cell.toLowerCase().includes(`(${ttTeacher.trim().toLowerCase()})`);
+    });
+    if(conflictClass){
+      showToast(`⚠️ ${ttTeacher} is already teaching "${conflictClass[0]}" at ${ttDay} ${slot}!`);
+      return;
+    }
+  }
+
   try{
     await apiCall('/timetable','POST',{
       class:finalClass,
@@ -979,22 +1012,23 @@ const sendAnn=async(scheduled=false)=>{
                   .catch(()=>setAdminAssignments([]));
               },[]);
               const removeAssign=async(id)=>{
-                try{
-                  await apiCall(`/assignments/${id}/status`,'PUT',{status:'Removed'});
-                  setAdminAssignments(prev=>prev.map(a=>a.id===id?{...a,status:'Removed'}:a));
-                  showToast('Assignment removed in database.');
-                }catch(err){ showToast('Error removing assignment.'); }
-              };
-              const approveAssign=async(id)=>{
-                try{
-                  await apiCall(`/assignments/${id}/status`,'PUT',{status:'Approved'});
-                  setAdminAssignments(prev=>prev.map(a=>a.id===id?{...a,status:'Approved'}:a));
-                  showToast('Assignment approved in database!');
-                }catch(err){ showToast('Error approving assignment.'); }
-              };
-              const totalAssignments=adminAssignments.length;
-              const totalSubmitted=adminAssignments.reduce((sum,a)=>sum+a.submissions,0);
-              const totalStudentsA=adminAssignments.reduce((sum,a)=>sum+a.total,0);
+  try{
+    await apiCall(`/assignments/admin/${id}/status`,'PUT',{status:'Removed'});
+    setAdminAssignments(prev=>prev.map(a=>a.id===id?{...a,status:'Removed'}:a));
+    showToast('Assignment removed in database.');
+  }catch(err){ showToast('Error removing assignment.'); }
+};
+const approveAssign=async(id)=>{
+  try{
+    await apiCall(`/assignments/admin/${id}/status`,'PUT',{status:'Approved'});
+    setAdminAssignments(prev=>prev.map(a=>a.id===id?{...a,status:'Approved'}:a));
+    showToast('Assignment approved in database!');
+  }catch(err){ showToast('Error approving assignment.'); }
+};
+
+        const totalAssignments=adminAssignments.length;
+const totalSubmitted=adminAssignments.reduce((sum,a)=>sum+a.submissions,0);
+const totalStudentsA=adminAssignments.reduce((sum,a)=>sum+a.total,0);
               return(<>
                 <div className="tab-row">{[['overview','📊 Overview'],['manage','⚙️ Manage']].map(([t,l])=><button key={t} className={`tab-btn ${aAssignTab===t?'active':''}`} onClick={()=>setAAssignTab(t)}>{l}</button>)}</div>
                 {aAssignTab==='overview'&&(<>
@@ -1009,15 +1043,15 @@ const sendAnn=async(scheduled=false)=>{
                     <tbody>{adminAssignments.map(a=>(<tr key={a.id}><td style={{fontSize:10}}>{a.teacher}</td><td>{a.subject}</td><td style={{fontSize:10}}>{a.cls}</td><td style={{fontSize:10}}>{a.dueDate}</td><td><span style={{color:'#4ade80',fontWeight:600}}>{a.submissions}</span>/{a.total}</td><td><span className={`badge ${a.status==='Active'?'bg':a.status==='Approved'?'bb':'br'}`}>{a.status}</span></td></tr>))}</tbody></table>
                   </div>
                 </>)}
-                {aAssignTab==='manage'&&(
+          {aAssignTab==='manage'&&(
                   <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>Approve / Remove</div>
-                    {adminAssignments.map(a=>(
+                    {adminAssignments.filter(a=>a.status!=='Removed').map(a=>(
                       <div className="notif-item" key={a.id}>
-                        <div className="notif-dot" style={{background:a.status==='Removed'?'#C0392B':a.status==='Approved'?'#1D9E75':'#D4AC0D'}}></div>
+                        <div className="notif-dot" style={{background:a.status==='Approved'?'#1D9E75':'#D4AC0D'}}></div>
                         <div style={{flex:1}}><div className="notif-text">{a.subject} — {a.topic}</div><div className="notif-time">By: {a.teacher} · {a.cls}</div></div>
                         <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                          {a.status!=='Approved'&&a.status!=='Removed'&&<button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 8px'}} onClick={()=>approveAssign(a.id)}>✓ Approve</button>}
-                          {a.status!=='Removed'&&<button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 8px'}} onClick={()=>removeAssign(a.id)}>✕ Remove</button>}
+                          {a.status!=='Approved'&&<button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 8px'}} onClick={()=>approveAssign(a.id)}>✓ Approve</button>}
+                          <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 8px'}} onClick={()=>removeAssign(a.id)}>✕ Remove</button>
                         </div>
                       </div>
                     ))}

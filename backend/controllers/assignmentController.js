@@ -31,7 +31,7 @@ exports.createAssignment = async (req, res) => {
 // TEACHER: get ONLY their own assignments (used by Teacher Dashboard)
 exports.getMyAssignments = async (req, res) => {
   try {
-    const assignments = await Assignment.find({ teacher: req.user.id })
+    const assignments = await Assignment.find({ teacher: req.user.id, status: { $ne: 'Removed' } })
       .populate('teacher', 'name')
       .populate('submissions.student', 'name roll')
       .sort({ createdAt: -1 });
@@ -44,7 +44,7 @@ exports.getMyAssignments = async (req, res) => {
 // STUDENT: get assignments for their class
 exports.getAssignments = async (req, res) => {
   try {
-    const assignments = await Assignment.find({ class: req.params.className })
+    const assignments = await Assignment.find({ class: req.params.className, status: { $ne: 'Removed' } })
       .populate('teacher', 'name');
     res.status(200).json(assignments);
   } catch (error) {
@@ -91,19 +91,16 @@ exports.updateAssignment = async (req, res) => {
     res.status(500).json({ message: 'Server error', error });
   }
 };
-exports.updateAssignmentStatus = async (req, res) => {
+// ADMIN ONLY: approve/remove any teacher's assignment — no ownership check
+exports.adminUpdateAssignmentStatus = async (req, res) => {
   try {
     const { status } = req.body;
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
 
-    if (String(assignment.teacher) !== String(req.user.id)) {
-      return res.status(403).json({ message: 'Not authorized to update this assignment' });
-    }
-
     assignment.status = status;
     await assignment.save();
-    res.status(200).json({ message: 'Assignment status updated', assignment });
+    res.status(200).json({ message: 'Assignment status updated by admin', assignment });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }
@@ -177,6 +174,20 @@ exports.deleteAssignment = async (req, res) => {
 
     await Assignment.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: 'Assignment deleted' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+// ADMIN ONLY: approve/remove any teacher's assignment — no ownership check
+exports.adminUpdateAssignmentStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+
+    assignment.status = status;
+    await assignment.save();
+    res.status(200).json({ message: 'Assignment status updated by admin', assignment });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }

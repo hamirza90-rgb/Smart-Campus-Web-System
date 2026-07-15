@@ -117,9 +117,11 @@ useEffect(()=>{
 const topStudentsWithMarks = students.map(s => {
   const studentResults = homeResults.filter(r => r.student && (r.student._id === s._id));
   const avgPercentage = studentResults.length > 0
-  ? Math.round(studentResults.reduce((sum, r) => sum + Number(r.percentage), 0) / studentResults.length)
+  ? Math.round(studentResults.reduce((sum, r) => sum + (r.total>0 ? (r.marks/r.total*100) : 0), 0) / studentResults.length)
   : 0;
-  return { ...s, marks: avgPercentage };
+  const calcGrade = studentResults.length===0 ? 'N/A' :
+    (avgPercentage>=90?'A+':avgPercentage>=80?'A':avgPercentage>=70?'B+':avgPercentage>=60?'B':avgPercentage>=50?'C':avgPercentage>=40?'D':'F');
+  return { ...s, marks: avgPercentage, grade: calcGrade };
 }).sort((a,b) => b.marks - a.marks);
 const [homeAssignments, setHomeAssignments] = useState([]);
 useEffect(()=>{
@@ -395,9 +397,7 @@ const adminAnnsForTeacher=realAdminAnns.filter(a=>a.audience==='All Students & T
   })()}
 </div>
             </div>
-            <div className="card"><div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Top Students</div>
-              {topStudentsWithMarks.slice(0,4).map(s=>(<div className="user-row" key={s.name}><div className="user-av" style={{background:'rgba(36,113,163,0.3)'}}>{s.name[0]}</div><div><div className="user-name">{s.name}</div><div className="user-detail">{s.roll}</div></div><div style={{marginLeft:'auto',textAlign:'right'}}><div className="user-name">{s.marks}% · <span className={`badge ${getGradeColor(s.grade)}`} style={{fontSize:9}}>{s.grade}</span></div><div className="perf-mini"><div className="perf-bar"><div className="perf-fill" style={{width:`${s.marks}%`,background:'#2471A3'}}/></div><span className="user-detail">Att: {s.attend}%</span></div></div></div>))}
-            </div>
+            
             {adminAnnsForTeacher.length>0&&(
               <div className="card">
                 <div className="ct"><div className="ct-dot" style={{background:'#C0392B'}}></div>🔔 Admin Announcements
@@ -883,10 +883,7 @@ l: classStudents.filter(s=>manualData[s.name]==='L').length,
                   <div style={{display:'flex',gap:10}}>
                     <button onClick={resetAtt} style={{padding:'11px 24px',background:'linear-gradient(135deg,#0d2a1a,#1D9E75)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>
                       ➕ Take Another Class
-                    </button>
-                    <button onClick={saveAndDownload} style={{padding:'11px 24px',background:'rgba(36,113,163,0.2)',border:'1px solid rgba(36,113,163,0.3)',borderRadius:10,color:'#60a5fa',fontSize:13,fontWeight:600,cursor:'pointer'}}>
-                      💾 Download Record
-                    </button>
+                        </button>
                   </div>
                 </div>
               );
@@ -1556,7 +1553,7 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
                       <div className="user-av" style={{background:'rgba(36,113,163,0.3)'}}>{s.name[0]}</div>
                       <div><div className="user-name">{s.name}</div><div className="user-detail">{s.roll}</div></div>
                       <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
-    <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80'}}>{getStudentAttendancePct(s.roll)}%</span></div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa'}}>{s.marks}</span></div></div>
+    <div style={{textAlign:'right'}}><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Att: <span style={{color:'#4ade80'}}>{getStudentAttendancePct(s.roll)}%</span></div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Marks: <span style={{color:'#60a5fa'}}>{getStudentMarksPct(s._id)!=null?`${getStudentMarksPct(s._id)}%`:'N/A'}</span></div></div>
     <span className={`badge ${getGradeColor(getStudentGrade(s._id))}`}>{getStudentGrade(s._id)}</span>
     <button className="delete-btn" onClick={e=>{e.stopPropagation();deleteStudent(s._id);}}>Remove</button>
   </div>                     
@@ -1586,7 +1583,7 @@ localStorage.setItem(`totalMarks_${examClass}`, totalMarks);
 <div className="analy-card"><div className="analy-val"><span className={`badge ${getGradeColor(getStudentGrade(selectedStudent._id))}`}>{getStudentGrade(selectedStudent._id)}</span></div><div className="analy-lab">Grade</div></div>
                         </div>
                         <div className="pr"><span className="pl">Attendance</span><div className="pb"><div className="pf" style={{width:`${getStudentAttendancePct(selectedStudent.roll)}%`,background:'#1D9E75'}}/></div><span className="pv">{getStudentAttendancePct(selectedStudent.roll)}%</span></div>
-                        <div className="pr"><span className="pl">Academic Score</span><div className="pb"><div className="pf" style={{width:`${getStudentMarksPct(selectedStudent._id)||0}%`,background:'#2471A3'}}/></div><span className="pv">{selectedStudent.marks}%</span></div>
+                        <div className="pr"><span className="pl">Academic Score</span><div className="pb"><div className="pf" style={{width:`${getStudentMarksPct(selectedStudent._id)||0}%`,background:'#2471A3'}}/></div><span className="pv">{getStudentMarksPct(selectedStudent._id)!=null?`${getStudentMarksPct(selectedStudent._id)}%`:'N/A'}</span></div>
                         <div style={{marginTop:10,display:'flex',gap:8}}>
                           <button className="d-btn d-btn-blue" onClick={()=>setActivePane('t-attend')}>✍️ Mark Attendance</button>
                           <button className="d-btn d-btn-green" onClick={()=>setActivePane('t-result')}>📊 View Results</button>
