@@ -103,19 +103,19 @@ const studentId=user.roll||'FSc-2026-B-041';
   },[]);
   const [myTimetableData, setMyTimetableData] = useState([]);
   const [realAnns,setRealAnns]=useState([]);
-  useEffect(()=>{
-    const fetchAnns = () => {
-      apiCall('/announcements')
-        .then(data=>{
-          if(Array.isArray(data)) setRealAnns(data);
-          else setRealAnns([]);
-        })
-        .catch(()=>setRealAnns([]));
-    };
-    fetchAnns();
-    const interval = setInterval(fetchAnns, 8000);
-    return () => clearInterval(interval);
-  },[]);
+useEffect(()=>{
+  const fetchAnns = () => {
+    apiCall('/announcements?includeFuture=true')
+      .then(data=>{
+        if(Array.isArray(data)) setRealAnns(data);
+        else setRealAnns([]);
+      })
+      .catch(()=>setRealAnns([]));
+  };
+  fetchAnns();
+  const interval = setInterval(fetchAnns, 8000);
+  return () => clearInterval(interval);
+},[]);
   useEffect(()=>{
   if(!studentClass) return;
   apiCall('/timetable').then(data=>{

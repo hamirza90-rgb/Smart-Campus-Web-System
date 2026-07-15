@@ -5,15 +5,6 @@ const API = 'http://localhost:5000/api';
 
 const getToken = () => localStorage.getItem('token');
 
-const apiCall = async (endpoint, method = 'GET', body = null) => {
-  const options = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${getToken()}`
-    }
-  };
-  if (body) options.body = JSON.stringify(body);
   const apiCall = async (endpoint, method = 'GET', body = null) => {
   const token = getToken();
   console.log('TOKEN BEING SENT:', token);   // 👈 ye line add karein
@@ -28,17 +19,13 @@ const apiCall = async (endpoint, method = 'GET', body = null) => {
   const res = await fetch(`${API}${endpoint}`, options);
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.message || 'Request failed');
-  }
+  const error = new Error(data.message || 'Request failed');
+  error.status = res.status;
+  throw error;
+}
   return data;
 };
-  const res = await fetch(`${API}${endpoint}`, options);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.message || 'Request failed');
-  }
-  return data;
-};
+
 
 function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChangelog,setTtChangelog,adminAnns,setAdminAnns}){
   const [activePane,setActivePane]=useState('a-home');
@@ -336,10 +323,10 @@ const data=await apiCall('/students','POST',{
   // ── Timetable Helpers ──
   const dayMap={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat'};
   const reverseDayMap={Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday'};
-const addTtEntry=async()=>{
+   const addTtEntry=async()=>{
   const existingClass=Object.keys(classTimetables||{}).find(k=>k.toLowerCase().replace(/[-\s]/g,'')===ttClass.toLowerCase().replace(/[-\s]/g,''));
-const finalClass=existingClass||ttClass;
-const setTtEntries=(updater)=>{
+  const finalClass=existingClass||ttClass;
+  const setTtEntries=(updater)=>{
     setClassTimetables(prev=>{
       const cur=(prev&&prev[finalClass])||[];
       const next=typeof updater==='function'?updater(cur):updater;
@@ -349,32 +336,7 @@ const setTtEntries=(updater)=>{
   if(!ttSubject.trim()){ showToast('Enter subject name'); return; }
   if(!ttClass.trim()){ showToast('Enter class name'); return; }
   const slot=ttSlot.trim()||'08:00-09:30';
-  const shortDayCheck=dayMap[ttDay]||ttDay;
-
-  // ── CHECK 1: Same class, same day+time slot already occupied? ──
-  const currentClassRows=classTimetables?.[finalClass]||[];
-  const existingRow=currentClassRows.find(r=>r.time===slot);
-  const existingCell=existingRow ? existingRow[shortDayCheck] : '';
-  if(existingCell && existingCell.trim()!==''){
-    const confirmOverwrite=window.confirm(
-      `⚠️ ${finalClass} — ${ttDay} ${slot} is already assigned:\n"${existingCell}"\n\nOverwrite this slot?`
-    );
-    if(!confirmOverwrite) return;
-  }
-
-  // ── CHECK 2: Same teacher already busy elsewhere at same day+time? ──
-  if(ttTeacher.trim()){
-    const conflictClass=Object.entries(classTimetables||{}).find(([cls,rows])=>{
-      if(cls===finalClass) return false; // apni hi class mein overwrite already handled upar
-      const row=rows.find(r=>r.time===slot);
-      const cell=row ? row[shortDayCheck] : '';
-      return cell && cell.toLowerCase().includes(`(${ttTeacher.trim().toLowerCase()})`);
-    });
-    if(conflictClass){
-      showToast(`⚠️ ${ttTeacher} is already teaching "${conflictClass[0]}" at ${ttDay} ${slot}!`);
-      return;
-    }
-  }
+  const shortDay=dayMap[ttDay]||ttDay;
 
   try{
     await apiCall('/timetable','POST',{
@@ -385,7 +347,6 @@ const setTtEntries=(updater)=>{
       teacher:ttTeacher,
       room:ttRoom
     });
-    const shortDay=dayMap[ttDay]||ttDay;
     const cellVal=ttSubject+(ttTeacher?' ('+ttTeacher+')':'')+(ttRoom?' ['+ttRoom+']':'');
     setTtEntries(prev=>{
       const existing=prev.find(r=>r.time===slot);
@@ -398,9 +359,10 @@ const setTtEntries=(updater)=>{
     showToast('Timetable saved to database!');
     setTtSubject('');setTtTeacher('');setTtRoom('');
   }catch(err){
-    showToast('Error saving timetable.');
+    showToast(err?.message || 'Error saving timetable — slot may already be taken.');
   }
 };
+
 
   const clearTtSlot=async(rowTime,day,cls)=>{
   try{
@@ -428,28 +390,26 @@ const setTtEntries=(updater)=>{
     acc[cls].students[r.student?.name]=(acc[cls].students[r.student?.name]||0)+r.marks;
     return acc;
   },{})
-).map(([cls,data])=>({
-  cls,
-  avgMarks:Math.round(data.marks.reduce((a,b)=>a+b,0)/data.marks.length),
-  passRate:Math.round(data.marks.filter(m=>m>=40).length/data.marks.length*100),
-  topStudent:(()=>{
+).map(([cls,data])=>{
+  // ── Per-student average (matches homepage/performance logic) ──
   const uniqueStudents=[...new Set(allStudentResults.filter(r=>r.class===cls).map(r=>r.student?.name).filter(Boolean))];
-  const withAvg=uniqueStudents.map(name=>{
+  const studentAverages=uniqueStudents.map(name=>{
     const recs=allStudentResults.filter(r=>r.student?.name===name&&r.class===cls);
     const avg=recs.length?recs.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/recs.length:0;
     return {name,avg};
   });
-  return withAvg.sort((a,b)=>b.avg-a.avg)[0]?.name||'—';
-})(),
-  distinctions:Object.entries(data.students).filter(([name,marks])=>{
-  const studentRecords=allStudentResults.filter(r=>r.student?.name===name&&r.class===cls);
-  const avg=studentRecords.length?studentRecords.reduce((a,r)=>a+(r.marks/r.total*100),0)/studentRecords.length:0;
-  return avg>=80;
-}).length,
-  appeared:data.marks.length,
-  status:allStudentResults.filter(r=>r.class===cls).every(r=>r.isPublished===false)?'Draft':'Published',
-  id:'auto_'+cls
-}));
+
+  return{
+    cls,
+    avgMarks: studentAverages.length?Math.round(studentAverages.reduce((a,s)=>a+s.avg,0)/studentAverages.length):0,
+    passRate: studentAverages.length?Math.round(studentAverages.filter(s=>s.avg>=40).length/studentAverages.length*100):0,
+    topStudent: [...studentAverages].sort((a,b)=>b.avg-a.avg)[0]?.name||'—',
+    distinctions: studentAverages.filter(s=>s.avg>=80).length,
+    appeared: uniqueStudents.length,
+    status:allStudentResults.filter(r=>r.class===cls).every(r=>r.isPublished===false)?'Draft':'Published',
+    id:'auto_'+cls
+  };
+});
   const topStudentsByClass=resultRows.map(r=>{
   const classResults=allStudentResults.filter(x=>(x.class||'').toLowerCase().includes((r.cls||'').toLowerCase().split(' ')[0])||(r.cls||'').toLowerCase().includes((x.class||'').toLowerCase().split(' ')[0]));
   const studentTotals={};
@@ -461,13 +421,16 @@ const setTtEntries=(updater)=>{
   return {...r, topStudent: top?top[0]:r.topStudent};
 });
 const avgScore=allStudentResults.length?Math.round(allStudentResults.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/allStudentResults.length):0;
-const passStudentIds=[...new Set(allStudents.map(s=>s._id))].filter(id=>{
+// Only count students who actually have result records (attempted students)
+const studentsWithResultIds=[...new Set(allStudents.map(s=>s._id))].filter(id=>
+  allStudentResults.some(r=>r.student?._id===id||r.student===id)
+);
+const passStudentIds=studentsWithResultIds.filter(id=>{
   const recs=allStudentResults.filter(r=>r.student?._id===id||r.student===id);
-  if(recs.length===0) return false;
   const avg=recs.reduce((a,r)=>a+(r.total>0?r.marks/r.total*100:0),0)/recs.length;
   return avg>=40;
 });
-const avgPass=allStudents.length?Math.round(passStudentIds.length/allStudents.length*100):0;
+const avgPass=studentsWithResultIds.length?Math.round(passStudentIds.length/studentsWithResultIds.length*100):0;
 const totalDistinctions=allStudentResults.filter(r=>r.total>0&&r.marks/r.total>=0.8).length;
 
   const saveEditResult=async()=>{
@@ -819,9 +782,7 @@ const sendAnn=async(scheduled=false)=>{
 
   {resultTab==='overview'&&(
     <div className="card">
-      <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Result Overview
-        <button className="add-btn" style={{margin:0,fontSize:10,marginLeft:'auto'}} onClick={()=>setShowAddResult(!showAddResult)}>+ Add Class</button>
-      </div>
+        <div className="ct"><div className="ct-dot" style={{background:'#D4AC0D'}}></div>Result Overview</div>    
       <div className="analy-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:12}}>
         <div className="analy-card"><div className="analy-val">{avgScore}%</div><div className="analy-lab">Avg Score</div></div>
         <div className="analy-card"><div className="analy-val" style={{color:'#4ade80'}}>{avgPass}%</div><div className="analy-lab">Pass Rate</div></div>
@@ -859,15 +820,22 @@ const sendAnn=async(scheduled=false)=>{
           <div style={{display:'flex',gap:8,marginTop:8}}><button className="d-btn d-btn-green" onClick={saveEditResult}>✓ Save</button><button className="d-btn d-btn-blue" onClick={()=>setEditingResult(null)}>Cancel</button></div>
         </div>
       )}
-      <table className="mt"><thead><tr><th>Class</th><th>Avg Marks</th><th>Pass %</th><th>Top Student</th><th>Distinctions</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody>{autoClassResults.map(r=>(<tr key={r.id}>
-        <td>{r.cls}</td><td>{r.avgMarks}%</td><td><span className="badge bg">{r.passRate}%</span></td><td>{r.topStudent}</td><td>{r.distinctions}</td>
-        <td><span className={`badge ${r.status==='Published'?'bg':'ba'}`}>{r.status}</span></td>
-        <td><div style={{display:'flex',gap:4}}>
-          <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>setEditingResult({...r})}>Edit</button>
-          <button className="d-btn d-btn-red" style={{fontSize:'9px',padding:'2px 6px'}} onClick={()=>deleteResult(r.id)}>Delete</button>
-        </div></td>
-      </tr>))}</tbody></table>
+    <table className="mt"><thead><tr><th>Class</th><th>Avg Marks</th><th>Pass %</th><th>Top Student</th><th>Distinctions</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>{autoClassResults.map(r=>(<tr key={r.id}>
+  <td>{r.cls}</td><td>{r.avgMarks}%</td><td><span className="badge bg">{r.passRate}%</span></td><td>{r.topStudent}</td><td>{r.distinctions}</td>
+  <td><span className={`badge ${r.status==='Published'?'bg':'ba'}`}>{r.status}</span></td>
+  <td>
+    <button className="d-btn d-btn-green" style={{fontSize:'9px',padding:'2px 8px'}} onClick={async()=>{
+      try{
+        const newStatus=r.status==='Published'?'Draft':'Published';
+        const isPublished=newStatus==='Published';
+        await apiCall(`/studentresults/publish/${encodeURIComponent(r.cls)}`,'PUT',{isPublished});
+        setAllStudentResults(prev=>prev.map(sr=>sr.class===r.cls?{...sr,isPublished}:sr));
+        showToast(isPublished?'✅ Published!':'📴 Unpublished!');
+      }catch(e){showToast('Error updating status');}
+    }}>{r.status==='Published'?'📴 Unpublish':'📢 Publish'}</button>
+  </td>
+</tr>))}</tbody></table>
     </div>
   )}
 
@@ -976,14 +944,70 @@ const sendAnn=async(scheduled=false)=>{
   }catch(e){showToast('Error');}
 }}>{r.status==='Published'?'📴 Unpublish':'📢 Publish'}</button>
             <button className="d-btn d-btn-blue" style={{fontSize:'9px',padding:'2px 8px'}} onClick={()=>{
-              const rows=allStudentResults.filter(x=>x.class===r.cls);
+  const rows=allStudentResults.filter(x=>x.class===r.cls);
+  const date=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+  const rowsHtml=rows.map((x,i)=>{
+    const pct=x.total>0?Math.round(x.marks/x.total*100):0;
+    const statusCol=pct>=40?'#166534':'#b91c1c';
+    return `<tr style="background:${i%2===0?'#fafafa':'#fff'}">
+      <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;font-size:13.5px;font-weight:500;color:#111">${x.student?.name||'—'}</td>
+      <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151">${x.subject||'—'}</td>
+      <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13.5px;font-weight:700;color:#1a3a6e">${x.marks}</td>
+      <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13px;color:#555">${x.total}</td>
+      <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13.5px;font-weight:700">${pct}%</td>
+      <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;text-align:center"><span style="font-size:12.5px;font-weight:700;color:${statusCol}">${pct>=40?'PASS':'FAIL'}</span></td>
+    </tr>`;
+  }).join('');
+  const passCount=rows.filter(x=>x.total>0&&x.marks/x.total>=0.4).length;
+  const failCount=rows.length-passCount;
+  const avgMks=rows.length?Math.round(rows.reduce((a,x)=>a+(x.total>0?x.marks/x.total*100:0),0)/rows.length):0;
 
-              const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Report — ${r.cls}</title></head><body style="font-family:Arial;padding:30px"><h2>Punjab Group of Colleges</h2><h3>Result Report — ${r.cls}</h3><table border="1" cellpadding="8" style="width:100%;border-collapse:collapse"><thead><tr><th>Student</th><th>Subject</th><th>Marks</th><th>Total</th><th>%</th><th>Result</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${x.student?.name||'—'}</td><td>${x.subject||'—'}</td><td>${x.marks}</td><td>${x.total}</td><td>${x.total>0?Math.round(x.marks/x.total*100):0}%</td><td>${x.total>0&&x.marks/x.total>=0.4?'Pass':'Fail'}</td></tr>`).join('')}</tbody></table></body></html>`;
-              const blob=new Blob([html],{type:'text/html'});
-              const url=URL.createObjectURL(blob);
-              const a=document.createElement('a');a.href=url;a.download=`Report_${r.cls.replace(/ /g,'_')}.html`;a.click();URL.revokeObjectURL(url);
-              showToast('📄 Report card downloaded!');
-            }}>📄 Report Card</button>
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Result Report — ${r.cls}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Times New Roman',Times,serif;background:#f1f5f9;display:flex;justify-content:center;padding:30px 16px}.page{width:800px;background:#fff;border-radius:8px;box-shadow:0 4px 32px rgba(0,0,0,0.12);overflow:hidden}@media print{body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0;width:100%}.no-print{display:none!important}}</style>
+</head><body>
+<div class="page">
+  <div style="background:linear-gradient(135deg,#0f2444,#1a3a6e);padding:28px 32px;color:#fff;text-align:center">
+    <div style="font-size:24px;font-weight:700">Punjab Group of Colleges</div>
+    <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.7;margin-top:4px">Lalamusa Campus · Smart Campus Web System</div>
+    <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,0.3);padding-top:14px">
+      <div style="font-size:18px;font-weight:700">CLASS RESULT REPORT</div>
+      <div style="font-size:13px;opacity:0.75;margin-top:4px">${r.cls}</div>
+    </div>
+  </div>
+  <div style="background:#f8fafc;border-bottom:2px solid #e2e8f0;padding:16px 32px;display:flex;gap:40px;flex-wrap:wrap">
+    <div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px">Class</div><div style="font-size:13.5px;font-weight:600;color:#111">${r.cls}</div></div>
+    <div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px">Total Records</div><div style="font-size:13.5px;font-weight:600;color:#111">${rows.length}</div></div>
+    <div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px">Issue Date</div><div style="font-size:13.5px;font-weight:600;color:#111">${date}</div></div>
+  </div>
+  <div style="padding:24px 32px">
+    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+      <thead><tr style="background:#1e3a5f;color:#fff">
+        <th style="padding:11px 16px;text-align:left;font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase">Student</th>
+        <th style="padding:11px 16px;text-align:left;font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase">Subject</th>
+        <th style="padding:11px 16px;text-align:center;font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase">Marks</th>
+        <th style="padding:11px 16px;text-align:center;font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase">Total</th>
+        <th style="padding:11px 16px;text-align:center;font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase">%</th>
+        <th style="padding:11px 16px;text-align:center;font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase">Result</th>
+      </tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div style="margin-top:20px;background:linear-gradient(135deg,#eff6ff,#f0fdf4);border:1.5px solid #bfdbfe;border-radius:10px;padding:16px 24px;display:flex;gap:32px;flex-wrap:wrap">
+      <div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px">Pass</div><div style="font-size:18px;font-weight:700;color:#166534">${passCount}</div></div>
+      <div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px">Fail</div><div style="font-size:18px;font-weight:700;color:#b91c1c">${failCount}</div></div>
+      <div><div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px">Class Average</div><div style="font-size:18px;font-weight:700;color:#1d4ed8">${avgMks}%</div></div>
+    </div>
+  </div>
+  <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 32px;display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:11px;color:#9ca3af">Punjab Group of Colleges, Lalamusa — Official Class Result Report</div>
+    <div class="no-print"><button onclick="window.print()" style="background:#1e3a5f;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">🖨 Print / Save PDF</button></div>
+  </div>
+</div>
+</body></html>`;
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`Report_${r.cls.replace(/ /g,'_')}.html`;a.click();URL.revokeObjectURL(url);
+  showToast('📄 Report card downloaded!');
+}}>📄 Report Card</button>
           </div>
         </div>
       ))}
@@ -1078,11 +1102,11 @@ const totalStudentsA=adminAssignments.reduce((sum,a)=>sum+a.total,0);
               },[allStudents,resultRows]);
               const filteredPerf=perfClass==='All Classes'?allStudents:allStudents.filter(s=>s.dept===perfClass);
               const getStudentAvgPct=(studentId)=>{
-                const recs=allStudentResults.filter(r=>r.student?._id===studentId||r.student===studentId);
-                if(recs.length===0) return 0;
-                const sum=recs.reduce((a,r)=>a+(r.total>0?(r.marks/r.total*100):0),0);
-                return Math.round(sum/recs.length);
-              };
+  const recs=allStudentResults.filter(r=>r.student?._id===studentId||r.student===studentId);
+  if(recs.length===0) return null;
+  const sum=recs.reduce((a,r)=>a+(r.total>0?(r.marks/r.total*100):0),0);
+  return Math.round(sum/recs.length);
+};
               const getStudentAttendPct=(rollNo)=>{
                 const recs=allAttendance.filter(r=>r.rollNo===rollNo);
                 if(recs.length===0) return 0;
@@ -1090,9 +1114,10 @@ const totalStudentsA=adminAssignments.reduce((sum,a)=>sum+a.total,0);
                 return Math.round((present/recs.length)*100);
               };
               const perfWithMarks=filteredPerf.map(s=>({...s,calcMarks:getStudentAvgPct(s._id),calcAttend:getStudentAttendPct(s.roll)}));
-              const avgM=perfWithMarks.length?Math.round(perfWithMarks.reduce((a,s)=>a+s.calcMarks,0)/perfWithMarks.length):0;
-              const avgA=perfWithMarks.length?Math.round(perfWithMarks.reduce((a,s)=>a+s.calcAttend,0)/perfWithMarks.length):0;
-              const passStudents=perfWithMarks.filter(s=>s.calcMarks>=40).length;
+const studentsWithMarks=perfWithMarks.filter(s=>s.calcMarks!==null);
+const avgM=studentsWithMarks.length?Math.round(studentsWithMarks.reduce((a,s)=>a+s.calcMarks,0)/studentsWithMarks.length):0;
+const avgA=perfWithMarks.length?Math.round(perfWithMarks.reduce((a,s)=>a+s.calcAttend,0)/perfWithMarks.length):0;
+const passStudents=studentsWithMarks.filter(s=>s.calcMarks>=40).length;
               const aRisk=perfWithMarks.filter(s=>s.calcAttend<75).length;
               const topStudents=[...perfWithMarks].sort((a,b)=>b.calcMarks-a.calcMarks).slice(0,5);
               const gradeGroups={A:perfWithMarks.filter(s=>s.calcMarks>=80).length,B:perfWithMarks.filter(s=>s.calcMarks>=60&&s.calcMarks<80).length,C:perfWithMarks.filter(s=>s.calcMarks>=40&&s.calcMarks<60).length,F:perfWithMarks.filter(s=>s.calcMarks<40).length};

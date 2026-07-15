@@ -42,13 +42,33 @@ exports.getClassResults = async (req, res) => {
 };
 exports.getPassRate = async (req, res) => {
   try {
-    const results = await StudentResult.find({ isPublished: true }, 'marks total');
+    const results = await StudentResult.find({ isPublished: true }, 'student marks total');
     if (results.length === 0) {
       return res.status(200).json({ passRate: null, totalResults: 0 });
     }
-    const passed = results.filter(r => (r.total > 0 ? (r.marks / r.total) * 100 : 0) >= 40).length;
-    const passRate = Math.round((passed / results.length) * 100);
-    res.status(200).json({ passRate, totalResults: results.length, passed });
+
+    // ── Group records by student, then compute each student's average % ──
+    const studentMap = {};
+    results.forEach(r => {
+      const sid = String(r.student);
+      if (!studentMap[sid]) studentMap[sid] = [];
+      const pct = r.total > 0 ? (r.marks / r.total) * 100 : 0;
+      studentMap[sid].push(pct);
+    });
+
+    const studentAverages = Object.values(studentMap).map(pcts =>
+      pcts.reduce((a, b) => a + b, 0) / pcts.length
+    );
+
+    const passedStudents = studentAverages.filter(avg => avg >= 40).length;
+    const passRate = Math.round((passedStudents / studentAverages.length) * 100);
+
+    res.status(200).json({
+      passRate,
+      totalResults: results.length,
+      totalStudents: studentAverages.length,
+      passed: passedStudents
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }

@@ -33,24 +33,77 @@ exports.addOrUpdateSlot = async (req, res) => {
   try {
     const { class: className, day, time, subject, teacher, room } = req.body;
     const normalized = normalizeClass(className);
-    
-    let entry = await Timetable.findOne({ normalizedClass: normalized, day, time });
+
+    // Check if teacher is already assigned in another class
+    if (teacher && teacher.trim()) {
+      const teacherConflict = await Timetable.findOne({
+        teacher: { $regex: new RegExp(`^${teacher.trim()}$`, "i") },
+        day,
+        time,
+        normalizedClass: { $ne: normalized }
+      });
+
+      if (teacherConflict) {
+        return res.status(409).json({
+          message: `${teacher} is already assigned to ${teacherConflict.class} on ${day} ${time}.`
+        });
+      }
+    }
+    // Check if room is already occupied at this day+time by another class
+    if (room && room.trim()) {
+      const roomConflict = await Timetable.findOne({
+        room: { $regex: new RegExp(`^${room.trim()}$`, "i") },
+        day,
+        time,
+        normalizedClass: { $ne: normalized }
+      });
+
+      if (roomConflict) {
+        return res.status(409).json({
+          message: `${room} is already occupied by ${roomConflict.class} (${roomConflict.subject}) on ${day} ${time}.`
+        });
+      }
+    }
+
+    // Check if slot already exists for this class
+    let entry = await Timetable.findOne({
+      normalizedClass: normalized,
+      day,
+      time
+    });
+
     if (entry) {
       entry.subject = subject;
       entry.teacher = teacher;
       entry.room = room;
       await entry.save();
-      res.status(200).json({ message: 'Timetable slot updated', entry });
-    } else {
-      entry = await Timetable.create({ 
-        class: className, 
-        normalizedClass: normalized,
-        day, time, subject, teacher, room 
+
+      return res.status(200).json({
+        message: "Timetable slot updated",
+        entry
       });
-      res.status(201).json({ message: 'Timetable slot added', entry });
     }
+
+    entry = await Timetable.create({
+      class: className,
+      normalizedClass: normalized,
+      day,
+      time,
+      subject,
+      teacher,
+      room
+    });
+
+    return res.status(201).json({
+      message: "Timetable slot added",
+      entry
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    res.status(500).json({
+      message: "Server error",
+      error
+    });
   }
 };
 

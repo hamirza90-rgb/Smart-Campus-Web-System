@@ -321,7 +321,7 @@ const deleteStudent=async(id)=>{
   const [realAdminAnns,setRealAdminAnns]=useState([]);
 useEffect(()=>{
   const fetchAdminAnns = () => {
-    fetch('http://localhost:5000/api/announcements')
+    fetch('http://localhost:5000/api/announcements?includeFuture=true')
       .then(res=>res.json())
       .then(data=>{
         if(Array.isArray(data)){
@@ -334,6 +334,7 @@ useEffect(()=>{
   const interval = setInterval(fetchAdminAnns, 8000);
   return () => clearInterval(interval);
 },[]);
+
 
 const adminAnnsForTeacher=realAdminAnns.filter(a=>a.audience==='All Students & Teachers'||a.audience==='Teachers Only').map(a=>({
   id:a._id,

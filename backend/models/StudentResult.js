@@ -9,6 +9,8 @@ const studentResultSchema = new mongoose.Schema({
   total: { type: Number, required: true, default: 100 },
   class: { type: String, default: '' },
   isPublished: { type: Boolean, default: true },
+  normalizedExamName: { type: String, default: '' },
+  normalizedSubject: { type: String, default: '' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('StudentResult', studentResultSchema);

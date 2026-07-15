@@ -14,21 +14,27 @@ exports.getStudentResults = async (req, res) => {
 exports.addStudentResult = async (req, res) => {
   try {
     const { student, examName, subject, marks, total, class: cls, examType } = req.body;
-    
+
+    // ── Normalize text so "Monthly Test" and "monthly test " are treated as the same exam ──
+    const normalizedExamName = (examName||examType||'').trim().toLowerCase();
+    const normalizedSubject = (subject||'').trim().toLowerCase();
+
     const result = await StudentResult.findOneAndUpdate(
       { 
         student: student, 
-        examName: examName||examType, 
-        subject: subject 
+        normalizedExamName,
+        normalizedSubject
       },
       { 
         student, 
-        examName: examName||examType, 
-        subject, 
+        examName: (examName||examType||'').trim(), 
+        subject: (subject||'').trim(), 
+        normalizedExamName,
+        normalizedSubject,
         marks, 
         total,
         class: cls,
-        examType: examType||examName
+        examType: (examType||examName||'').trim()
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
