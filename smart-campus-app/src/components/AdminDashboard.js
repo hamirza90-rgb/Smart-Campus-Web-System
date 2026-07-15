@@ -170,9 +170,14 @@ useEffect(()=>{
   return `${diffMonths}mo ago`;
 };
   useEffect(()=>{
-  apiCall('/announcements').then(data=>{
-    if(Array.isArray(data)) setAnns(data.map(a=>({...a,id:a._id,time:a.scheduled&&a.schedDate?`Scheduled: ${a.schedDate}`:formatTimeAgo(a.createdAt),color:'#C0392B'})));
-  }).catch(()=>{});
+  const fetchAnns = () => {
+    apiCall('/announcements?includeFuture=true').then(data=>{
+      if(Array.isArray(data)) setAnns(data.map(a=>({...a,id:a._id,time:a.scheduled&&a.schedDate?`Scheduled: ${a.schedDate}`:formatTimeAgo(a.createdAt),color:'#C0392B'})));
+    }).catch(()=>{});
+  };
+  fetchAnns();
+  const interval = setInterval(fetchAnns, 8000);
+  return () => clearInterval(interval);
 },[setAnns]);
   const [aTitle,setATitle]=useState('');
   const [aMsg,setAMsg]=useState('');

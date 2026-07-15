@@ -320,14 +320,19 @@ const deleteStudent=async(id)=>{
   const paneTitle=navItems.find(n=>n.id===activePane)?.label||'Dashboard';
   const [realAdminAnns,setRealAdminAnns]=useState([]);
 useEffect(()=>{
-  fetch('http://localhost:5000/api/announcements')
-    .then(res=>res.json())
-    .then(data=>{
-      if(Array.isArray(data)){
-        const adminOnly = data.filter(a => a.createdBy!=='teacher');
-        setRealAdminAnns(adminOnly);
-      }
-    }).catch(()=>{});
+  const fetchAdminAnns = () => {
+    fetch('http://localhost:5000/api/announcements')
+      .then(res=>res.json())
+      .then(data=>{
+        if(Array.isArray(data)){
+          const adminOnly = data.filter(a => a.createdBy!=='teacher');
+          setRealAdminAnns(adminOnly);
+        }
+      }).catch(()=>{});
+  };
+  fetchAdminAnns();
+  const interval = setInterval(fetchAdminAnns, 8000);
+  return () => clearInterval(interval);
 },[]);
 
 const adminAnnsForTeacher=realAdminAnns.filter(a=>a.audience==='All Students & Teachers'||a.audience==='Teachers Only').map(a=>({

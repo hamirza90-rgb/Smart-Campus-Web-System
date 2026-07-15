@@ -1,4 +1,6 @@
 const Result = require('../models/Result');
+const StudentResult = require('../models/StudentResult');
+
 
 exports.addResult = async (req, res) => {
   try {
@@ -40,11 +42,11 @@ exports.getClassResults = async (req, res) => {
 };
 exports.getPassRate = async (req, res) => {
   try {
-    const results = await Result.find({}, 'percentage');
+    const results = await StudentResult.find({ isPublished: true }, 'marks total');
     if (results.length === 0) {
       return res.status(200).json({ passRate: null, totalResults: 0 });
     }
-    const passed = results.filter(r => r.percentage >= 40).length;
+    const passed = results.filter(r => (r.total > 0 ? (r.marks / r.total) * 100 : 0) >= 40).length;
     const passRate = Math.round((passed / results.length) * 100);
     res.status(200).json({ passRate, totalResults: results.length, passed });
   } catch (error) {

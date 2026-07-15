@@ -4,7 +4,24 @@ const Announcement = require('../models/Announcement');
 exports.getAllAnnouncements = async (req, res) => {
   try {
     const anns = await Announcement.find().sort({ createdAt: -1 });
-    res.status(200).json(anns);
+
+    // Admin ko sab dikhna chahiye (scheduled + live) — isliye query param se check karo
+    const isAdminView = req.query.includeFuture === 'true';
+
+    if (isAdminView) {
+      return res.status(200).json(anns);
+    }
+
+    // Students/Teachers ke liye — sirf wahi announcements jo scheduled nahi hain
+    // YA jinki schedDate aaj ki tareekh tak pohanch chuki hai
+    const todayStr = new Date().toISOString().split('T')[0]; // "2026-07-15"
+
+    const visibleAnns = anns.filter(a => {
+      if (!a.scheduled || !a.schedDate) return true; // scheduled nahi to hamesha dikhega
+      return a.schedDate <= todayStr; // scheduled date aaj ya pehle hai to dikhega
+    });
+
+    res.status(200).json(visibleAnns);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }
