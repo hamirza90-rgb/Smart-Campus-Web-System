@@ -19,7 +19,7 @@ exports.getAllStudents = async (req, res) => {
 exports.addStudent = async (req, res) => {
   try {
     const { name, email, roll, dept, section, phone, attend, marks, grade, password } = req.body;
-    const existing = await Student.findOne({ roll });
+    const existing = await Student.findOne({ roll, dept });
     if (existing) return res.status(400).json({ message: 'Student with this roll already exists' });
     const student = await Student.create({
       name,

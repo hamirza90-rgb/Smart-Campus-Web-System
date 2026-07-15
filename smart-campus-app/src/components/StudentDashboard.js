@@ -31,6 +31,7 @@ function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,t
   const [courses,setCourses]=useState([]);
   const [loadingCourses,setLoadingCourses]=useState(true);
   // Merge: local + admin + teacher notifications
+const normalizeClass=(cls)=>(cls||'').toLowerCase().replace(/[-\s]+/g,' ').trim();
 const studentClass = user.dept || '';
 const studentSection = user.section || 'N/A';
 const getProgramName=(cls)=>{
@@ -100,6 +101,7 @@ const studentId=user.roll||'FSc-2026-B-041';
       .catch(()=>setRealAssignments([]));
         // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+  const [myTimetableData, setMyTimetableData] = useState([]);
   const [realAnns,setRealAnns]=useState([]);
   useEffect(()=>{
     apiCall('/announcements')
@@ -109,6 +111,25 @@ const studentId=user.roll||'FSc-2026-B-041';
       })
       .catch(()=>setRealAnns([]));
   },[]);
+  useEffect(()=>{
+  if(!studentClass) return;
+  apiCall('/timetable').then(data=>{
+    if(Array.isArray(data)){
+      const mySlots=data.filter(entry=>
+  (entry.normalizedClass||normalizeClass(entry.class||''))===normalizeClass(studentClass)
+);
+      const grouped={};
+      mySlots.forEach(entry=>{
+        const dayMap={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri'};
+        const shortDay=dayMap[entry.day]||entry.day;
+        let row=grouped[entry.time];
+        if(!row){ row={time:entry.time,Mon:'',Tue:'',Wed:'',Thu:'',Fri:''}; grouped[entry.time]=row; }
+        row[shortDay]=entry.subject+(entry.teacher?' ('+entry.teacher+')':'')+(entry.room?' ['+entry.room+']':'');
+      });
+      setMyTimetableData(Object.values(grouped).sort((a,b)=>a.time.localeCompare(b.time)));
+    }
+  }).catch(()=>{});
+},[studentClass]);
   const [realAttendance,setRealAttendance]=useState([]);
 useEffect(()=>{
   apiCall(`/attendance/class/${encodeURIComponent(studentClass)}`)
@@ -159,7 +180,7 @@ useEffect(()=>{
   const isNotifRead=(n)=>n._src?extReadIds.has(n.id):n.read;
   const unread=allNotifs.filter(n=>!isNotifRead(n)).length;
   // Student timetable from per-class store
-  const myTimetable=(classTimetables&&classTimetables[studentClass])||[];
+const myTimetable=myTimetableData.length>0?myTimetableData:(classTimetables&&classTimetables[studentClass])||[];
   const myTtChangelog=(ttChangelog||[]).filter(c=>c.cls===studentClass);
 
   const showToast=(msg,icon='✓')=>{ setToast({msg,icon}); setTimeout(()=>setToast(null),3000); };

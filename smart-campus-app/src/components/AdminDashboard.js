@@ -106,13 +106,7 @@ function AdminDashboard({user,onLogout,classTimetables,setClassTimetables,ttChan
     }
   }).catch(()=>{});
 },[setClassTimetables]);
-  const setTtEntries=(updater)=>{
-    setClassTimetables(prev=>{
-      const cur=(prev&&prev[ttClass])||[];
-      const next=typeof updater==='function'?updater(cur):updater;
-      return {...prev,[ttClass]:next};
-    });
-  };
+  
 
   // ── Results ──
   const [resultRows,setResultRows]=useState([]);
@@ -298,12 +292,21 @@ useEffect(()=>{
   const dayMap={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat'};
   const reverseDayMap={Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday'};
 const addTtEntry=async()=>{
+  const existingClass=Object.keys(classTimetables||{}).find(k=>k.toLowerCase().replace(/[-\s]/g,'')===ttClass.toLowerCase().replace(/[-\s]/g,''));
+const finalClass=existingClass||ttClass;
+const setTtEntries=(updater)=>{
+    setClassTimetables(prev=>{
+      const cur=(prev&&prev[finalClass])||[];
+      const next=typeof updater==='function'?updater(cur):updater;
+      return {...prev,[finalClass]:next};
+    });
+  };
   if(!ttSubject.trim()){ showToast('Enter subject name'); return; }
   if(!ttClass.trim()){ showToast('Enter class name'); return; }
   const slot=ttSlot.trim()||'08:00-09:30';
   try{
     await apiCall('/timetable','POST',{
-      class:ttClass,
+      class:finalClass,
       day:ttDay,
       time:slot,
       subject:ttSubject,
