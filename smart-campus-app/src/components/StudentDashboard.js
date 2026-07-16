@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import React, { useState, useEffect, useMemo } from 'react';
 import { initMockData, getGradeColor, getStatusColor } from '../mockData';
 import { PGCLogo, Toast } from './homepage';
@@ -16,8 +17,7 @@ const apiCall = async (endpoint, method = 'GET', body = null) => {
   return res.json();
 }
 function generateUniqueQRText(student){
-  const today=new Date().toISOString().split('T')[0];
-  return `PGC-ATTEND|${student.roll}|${student.name}|${today}`;
+  return `PGC-ATTEND|${student.roll}|${student.name}`;
 }
 function StudentDashboard({user,onLogout,classTimetables,ttChangelog,adminAnns,teacherNotifs}){
   const [activePane,setActivePane]=useState('s-home');
@@ -507,18 +507,28 @@ const overallGrade = d.results.length>0 ? (avgMarks>=90?'A+':avgMarks>=80?'A':av
                 roll: studentId
               };
               const uniqueQRText=generateUniqueQRText(studentObj);
-              const qrApiUrl=(sz)=>`https://api.qrserver.com/v1/create-qr-code/?size=${sz}x${sz}&data=${encodeURIComponent(uniqueQRText)}`;
 
               function StudentQRCode({size=140,pulse=false}){
+                const [qrDataUrl,setQrDataUrl]=useState('');
+                useEffect(()=>{
+                  QRCode.toDataURL(uniqueQRText, { width: size*3, margin: 1 })
+                    .then(url=>setQrDataUrl(url))
+                    .catch(()=>{});
+                  // eslint-disable-next-line react-hooks/exhaustive-deps
+                },[size]);
                 return(
                   <div style={{position:'relative',display:'inline-block'}}>
-                    <img
-                      src={qrApiUrl(size)}
-                      alt="Student QR Code"
-                      width={size}
-                      height={size}
-                      style={{display:'block',borderRadius:8}}
-                    />
+                    {qrDataUrl ? (
+                      <img
+                        src={qrDataUrl}
+                        alt="Student QR Code"
+                        width={size}
+                        height={size}
+                        style={{display:'block',borderRadius:8,imageRendering:'pixelated'}}
+                      />
+                    ) : (
+                      <div style={{width:size,height:size,background:'#f1f5f9',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#94a3b8'}}>Loading...</div>
+                    )}
                     {pulse&&<div style={{position:'absolute',inset:0,borderRadius:8,border:'3px solid #2471A3',animation:'pulse 2s ease infinite',pointerEvents:'none'}}/>}
                   </div>
                 );
